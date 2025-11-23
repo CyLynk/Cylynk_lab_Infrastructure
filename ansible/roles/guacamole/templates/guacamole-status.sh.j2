@@ -1,0 +1,8 @@
+#!/bin/bash
+cd {{ guacamole_base_dir }}
+echo "=== Guacamole Status ==="
+docker-compose ps
+echo ""
+echo "=== Container Logs (last 20 lines) ==="
+docker-compose logs --tail=20
+

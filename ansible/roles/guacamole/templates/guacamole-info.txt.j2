@@ -1,0 +1,58 @@
+========================================
+Guacamole Installation Complete
+========================================
+
+Environment: {{ environment }}
+Project: {{ project_name }}
+Installed: {{ ansible_date_time.iso8601 }}
+
+Instance Information:
+  Instance ID: {{ instance_metadata.results[0].content | default('N/A') }}
+  Public IP: {{ instance_metadata.results[1].content | default('N/A') }}
+  Private IP: {{ instance_metadata.results[2].content | default('N/A') }}
+
+Access Information:
+  URL: https://{{ instance_metadata.results[1].content | default('PUBLIC_IP') }}/guacamole
+  
+Default Credentials (CHANGE IMMEDIATELY):
+  Username: guacadmin
+  Password: guacadmin
+
+Database:
+  Password stored in: {{ guacamole_base_dir }}/.env
+  Database: guacamole_db
+  User: guacamole_user
+
+Management Commands:
+  Status: guacamole-status
+  Restart: guacamole-restart
+  Logs: guacamole-logs
+  Full logs: docker-compose -f {{ guacamole_base_dir }}/docker-compose.yml logs -f
+
+Configuration Files:
+  Docker Compose: {{ guacamole_base_dir }}/docker-compose.yml
+  Nginx Config: {{ guacamole_base_dir }}/nginx.conf
+  Environment: {{ guacamole_base_dir }}/.env
+
+{% if enable_lets_encrypt | default(false) and domain_name | default("") != "" %}
+Let's Encrypt Setup:
+  Domain: {{ domain_name }}
+  Setup Script: {{ guacamole_base_dir }}/setup-letsencrypt.sh
+  
+  To enable SSL:
+  1. Ensure DNS points {{ domain_name }} to {{ instance_metadata.results[1].content | default('PUBLIC_IP') }}
+  2. Run: {{ guacamole_base_dir }}/setup-letsencrypt.sh
+{% endif %}
+
+CloudWatch Logs:
+  Log Group: /cyberlab/{{ environment }}/guacamole/syslog
+  User Data Log: /var/log/user-data.log
+
+Next Steps:
+1. Login to https://{{ instance_metadata.results[1].content | default('PUBLIC_IP') }}/guacamole
+2. Change the default password
+3. Configure connections to AttackBox instances
+4. Test remote desktop functionality
+
+========================================
+

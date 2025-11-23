@@ -1,0 +1,153 @@
+---
+# Guacamole application deployment tasks
+
+- name: Ensure Guacamole DB password is defined
+  ansible.builtin.assert:
+    that:
+      - guacamole_db_password is defined
+      - guacamole_db_password | length >= 8
+    fail_msg: "guacamole_db_password must be defined (e.g. in inventory or group_vars) and at least 8 characters long."
+  no_log: true
+
+- name: Create environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ guacamole_base_dir }}/.env"
+    owner: "{{ guacamole_user }}"
+    group: "{{ guacamole_user }}"
+    mode: '0600'
+  no_log: true
+
+- name: Initialize Guacamole database schema
+  ansible.builtin.shell: |
+    docker run --rm guacamole/guacamole:{{ guacamole_version }} /opt/guacamole/bin/initdb.sh --postgresql > {{ guacamole_base_dir }}/initdb/001-initdb.sql
+  args:
+    creates: "{{ guacamole_base_dir }}/initdb/001-initdb.sql"
+  register: initdb_result
+
+- name: Verify initdb file was created
+  ansible.builtin.stat:
+    path: "{{ guacamole_base_dir }}/initdb/001-initdb.sql"
+  register: initdb_file_stat
+
+- name: Fail if initdb file is missing
+  ansible.builtin.fail:
+    msg: "Database initialization file was not created"
+  when: not initdb_file_stat.stat.exists
+
+- name: Create Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ guacamole_base_dir }}/docker-compose.yml"
+    owner: "{{ guacamole_user }}"
+    group: "{{ guacamole_user }}"
+    mode: '0644'
+  notify: restart guacamole
+
+- name: Create Nginx configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ guacamole_base_dir }}/nginx.conf"
+    owner: "{{ guacamole_user }}"
+    group: "{{ guacamole_user }}"
+    mode: '0644'
+  notify: restart guacamole
+
+- name: Generate self-signed SSL certificate
+  ansible.builtin.shell: |
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout {{ guacamole_base_dir }}/ssl/key.pem \
+      -out {{ guacamole_base_dir }}/ssl/cert.pem \
+      -subj "/C=US/ST=State/L=City/O={{ project_name }}/CN=guacamole.local" \
+      2>/dev/null
+  args:
+    creates: "{{ guacamole_base_dir }}/ssl/cert.pem"
+  when: not enable_lets_encrypt or domain_name == ""
+
+- name: Set permissions on SSL private key
+  ansible.builtin.file:
+    path: "{{ guacamole_base_dir }}/ssl/key.pem"
+    mode: '0600'
+    owner: root
+    group: root
+  when: not enable_lets_encrypt or domain_name == ""
+
+- name: Set permissions on SSL certificate
+  ansible.builtin.file:
+    path: "{{ guacamole_base_dir }}/ssl/cert.pem"
+    mode: '0644'
+    owner: root
+    group: root
+  when: not enable_lets_encrypt or domain_name == ""
+
+- name: Pull Docker images
+  community.docker.docker_image:
+    name: "{{ item }}"
+    source: pull
+  loop:
+    - "guacamole/guacamole:{{ guacamole_version }}"
+    - "guacamole/guacd:latest"
+    - "postgres:15-alpine"
+    - "nginx:alpine"
+    - "certbot/certbot:latest"
+  when: enable_lets_encrypt | default(false) and domain_name | default("") != ""
+
+- name: Start Guacamole services
+  community.docker.docker_compose_v2:
+    project_src: "{{ guacamole_base_dir }}"
+    state: present
+    pull: always
+  register: compose_result
+
+- name: Wait for services to be ready
+  ansible.builtin.wait_for:
+    port: 8080
+    host: localhost
+    delay: 10
+    timeout: 300
+    state: started
+
+- name: Create systemd service for Guacamole
+  ansible.builtin.template:
+    src: guacamole.service.j2
+    dest: /etc/systemd/system/guacamole.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Enable and start Guacamole systemd service
+  ansible.builtin.systemd:
+    name: guacamole
+    enabled: yes
+    daemon_reload: yes
+    state: started
+
+- name: Get instance metadata
+  ansible.builtin.uri:
+    url: "http://169.254.169.254/latest/meta-data/{{ item }}"
+    return_content: yes
+  register: instance_metadata
+  loop:
+    - instance-id
+    - public-ipv4
+    - local-ipv4
+  failed_when: false
+  changed_when: false
+
+- name: Create deployment info file
+  ansible.builtin.template:
+    src: guacamole-info.txt.j2
+    dest: /root/guacamole-info.txt
+    mode: '0644'
+  register: info_file_result
+
+- name: Display deployment information
+  ansible.builtin.command: cat /root/guacamole-info.txt
+  register: info_file_content
+  changed_when: false
+  failed_when: false
+
+- name: Show deployment information
+  ansible.builtin.debug:
+    msg: "{{ info_file_content.stdout_lines }}"
+  when: info_file_content.rc == 0
+

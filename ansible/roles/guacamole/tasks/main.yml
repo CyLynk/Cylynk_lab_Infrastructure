@@ -1,0 +1,18 @@
+---
+# Main tasks for Guacamole role
+
+- name: Include system setup tasks
+  ansible.builtin.include_tasks: system.yml
+
+- name: Include Docker setup tasks
+  ansible.builtin.include_tasks: docker.yml
+
+- name: Include Guacamole application tasks
+  ansible.builtin.include_tasks: application.yml
+
+- name: Include CloudWatch agent tasks
+  ansible.builtin.include_tasks: cloudwatch.yml
+
+- name: Include management scripts tasks
+  ansible.builtin.include_tasks: scripts.yml
+

@@ -1,0 +1,17 @@
+[Unit]
+Description=Apache Guacamole
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ guacamole_base_dir }}
+EnvironmentFile={{ guacamole_base_dir }}/.env
+ExecStart=/usr/local/bin/docker-compose up -d
+ExecStop=/usr/local/bin/docker-compose down
+ExecReload=/usr/local/bin/docker-compose restart
+
+[Install]
+WantedBy=multi-user.target
+

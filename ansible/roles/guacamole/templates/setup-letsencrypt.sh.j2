@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+echo "Setting up Let's Encrypt for {{ domain_name }}..."
+cd {{ guacamole_base_dir }}
+docker-compose run --rm certbot certonly \
+  --webroot \
+  --webroot-path=/var/www/certbot \
+  -d {{ domain_name }} \
+  --email {{ admin_email }} \
+  --agree-tos \
+  --no-eff-email
+
+# Update nginx to use Let's Encrypt certs
+sed -i 's|/etc/nginx/ssl/cert.pem|/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem|g' {{ guacamole_base_dir }}/nginx.conf
+sed -i 's|/etc/nginx/ssl/key.pem|/etc/letsencrypt/live/{{ domain_name }}/privkey.pem|g' {{ guacamole_base_dir }}/nginx.conf
+
+docker-compose restart nginx
+echo "Let's Encrypt setup complete!"
+

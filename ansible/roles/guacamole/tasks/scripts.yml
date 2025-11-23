@@ -1,0 +1,30 @@
+---
+# Management scripts creation
+
+- name: Create guacamole-status script
+  ansible.builtin.template:
+    src: guacamole-status.sh.j2
+    dest: /usr/local/bin/guacamole-status
+    mode: '0755'
+
+- name: Create guacamole-restart script
+  ansible.builtin.template:
+    src: guacamole-restart.sh.j2
+    dest: /usr/local/bin/guacamole-restart
+    mode: '0755'
+
+- name: Create guacamole-logs script
+  ansible.builtin.template:
+    src: guacamole-logs.sh.j2
+    dest: /usr/local/bin/guacamole-logs
+    mode: '0755'
+
+- name: Create Let's Encrypt setup script (if enabled)
+  ansible.builtin.template:
+    src: setup-letsencrypt.sh.j2
+    dest: "{{ guacamole_base_dir }}/setup-letsencrypt.sh"
+    owner: "{{ guacamole_user }}"
+    group: "{{ guacamole_user }}"
+    mode: '0755'
+  when: enable_lets_encrypt | default(false) and domain_name | default("") != ""
+

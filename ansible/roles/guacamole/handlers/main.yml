@@ -1,0 +1,17 @@
+---
+# Handlers for Guacamole role
+
+- name: restart guacamole
+  community.docker.docker_compose_v2:
+    project_src: "{{ guacamole_base_dir }}"
+    state: restarted
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: restart cloudwatch agent
+  ansible.builtin.systemd:
+    name: amazon-cloudwatch-agent
+    state: restarted
+

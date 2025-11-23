@@ -1,0 +1,14 @@
+---
+# Playbook to deploy Apache Guacamole
+- name: Deploy Guacamole Server
+  hosts: guacamole
+  become: yes
+  gather_facts: yes
+  vars:
+    guacamole_version: "latest"
+    docker_compose_version: "v2.24.0"
+    guacamole_base_dir: /opt/guacamole
+    guacamole_user: ubuntu
+
+  roles:
+    - role: ../roles/guacamole
