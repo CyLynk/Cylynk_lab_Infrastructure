@@ -1,0 +1,152 @@
+name: Terraform Deploy
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - "environments/**"
+            - "modules/**"
+    workflow_dispatch:
+        inputs:
+            environment:
+                description: "Environment to deploy"
+                required: true
+                type: choice
+                options:
+                    - dev
+                    - prod
+            action:
+                description: "Terraform action"
+                required: true
+                type: choice
+                options:
+                    - plan
+                    - apply
+                    - destroy
+
+permissions:
+    contents: read
+    pull-requests: write
+    id-token: write
+
+jobs:
+    terraform-deploy-dev:
+        name: Deploy Dev Environment
+        runs-on: ubuntu-latest
+        if: |
+            (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+            (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+        permissions:
+            id-token: write
+            contents: read
+            pull-requests: write
+        environment:
+            name: development
+            url: https://dev.cyberlab.example.com
+        defaults:
+            run:
+                working-directory: environments/dev
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ secrets.AWS_REGION }}
+                  role-session-name: GitHubActions-TerraformDeploy-Dev
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: "~> 1.0"
+
+            - name: Terraform Init
+              run: terraform init
+
+            - name: Terraform Plan
+              id: plan
+              run: |
+                  terraform plan -no-color -input=false -out=tfplan
+                  terraform show -no-color tfplan
+
+            - name: Terraform Apply
+              if: |
+                  (github.event_name == 'push') ||
+                  (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+              run: terraform apply -auto-approve tfplan
+
+            - name: Terraform Destroy
+              if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+              run: terraform destroy -auto-approve
+
+            - name: Output Summary
+              if: always()
+              run: |
+                  echo "### Terraform Deployment Summary" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Environment:** dev" >> $GITHUB_STEP_SUMMARY
+                  echo "**Action:** ${{ github.event.inputs.action || 'apply' }}" >> $GITHUB_STEP_SUMMARY
+                  echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  terraform output -no-color >> $GITHUB_STEP_SUMMARY || echo "No outputs available" >> $GITHUB_STEP_SUMMARY
+
+    terraform-deploy-prod:
+        name: Deploy Prod Environment
+        runs-on: ubuntu-latest
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+        permissions:
+            id-token: write
+            contents: read
+            pull-requests: write
+        environment:
+            name: production
+            url: https://cyberlab.example.com
+        defaults:
+            run:
+                working-directory: environments/prod
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ secrets.PROD_AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ secrets.AWS_REGION }}
+                  role-session-name: GitHubActions-TerraformDeploy-Prod
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: "~> 1.0"
+
+            - name: Terraform Init
+              run: terraform init
+
+            - name: Terraform Plan
+              id: plan
+              run: |
+                  terraform plan -no-color -input=false -out=tfplan
+                  terraform show -no-color tfplan
+
+            - name: Terraform Apply
+              if: github.event.inputs.action == 'apply'
+              run: terraform apply -auto-approve tfplan
+
+            - name: Terraform Destroy
+              if: github.event.inputs.action == 'destroy'
+              run: terraform destroy -auto-approve
+
+            - name: Output Summary
+              if: always()
+              run: |
+                  echo "### Terraform Deployment Summary" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Environment:** prod" >> $GITHUB_STEP_SUMMARY
+                  echo "**Action:** ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY
+                  echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  terraform output -no-color >> $GITHUB_STEP_SUMMARY || echo "No outputs available" >> $GITHUB_STEP_SUMMARY

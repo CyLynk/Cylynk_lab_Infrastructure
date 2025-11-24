@@ -24,6 +24,15 @@ override.tf.json
 *.local
 
 ########################
+# Ansible artifacts    #
+########################
+*.retry
+.ansible/
+ansible/inventory/hosts.yml
+collections/
+roles/external/
+
+########################
 # Editor & OS files    #
 ########################
 .vscode/

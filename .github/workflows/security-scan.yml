@@ -1,0 +1,121 @@
+name: Security Scan
+
+on:
+    pull_request:
+        branches:
+            - main
+            - develop
+    push:
+        branches:
+            - main
+    schedule:
+        # Run security scan daily at 2 AM UTC
+        - cron: "0 2 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    security-events: write
+    pull-requests: write
+
+jobs:
+    tfsec:
+        name: TFSec Security Scan
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run tfsec
+              uses: aquasecurity/tfsec-action@v1.0.3
+              with:
+                  soft_fail: true
+                  format: sarif
+                  additional_args: --minimum-severity MEDIUM
+
+            - name: Upload SARIF file
+              uses: github/codeql-action/upload-sarif@v3
+              if: always()
+              with:
+                  sarif_file: results.sarif
+
+    checkov:
+        name: Checkov Security Scan
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install Checkov
+              run: pip install checkov
+
+            - name: Run Checkov
+              id: checkov
+              run: |
+                  checkov --directory . \
+                    --framework terraform \
+                    --output cli \
+                    --soft-fail \
+                    --quiet
+              continue-on-error: true
+
+            - name: Comment Results
+              if: github.event_name == 'pull_request' && steps.checkov.outcome == 'failure'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const output = `#### Checkov Security Scan ⚠️
+
+                      Security issues were found in your Terraform code. Please review the workflow logs for details.
+
+                      **Recommendation:** Address high and critical severity issues before merging.
+
+                      *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: output
+                      })
+
+    secret-scan:
+        name: Secret Scanning
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Gitleaks Scan
+              uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITLEAKS_ENABLE_SUMMARY: true
+
+    dependency-scan:
+        name: Dependency Scanning
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  scan-type: "config"
+                  scan-ref: "."
+                  format: "sarif"
+                  output: "trivy-results.sarif"
+
+            - name: Upload Trivy results to GitHub Security tab
+              uses: github/codeql-action/upload-sarif@v3
+              if: always()
+              with:
+                  sarif_file: "trivy-results.sarif"
