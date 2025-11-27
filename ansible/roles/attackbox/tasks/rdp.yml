@@ -36,6 +36,12 @@
   tags:
     - rdp
 
+- name: Unlock user account (Kali AMI has accounts locked by default)
+  ansible.builtin.command: passwd -u {{ attackbox_user }}
+  changed_when: true
+  tags:
+    - rdp
+
 - name: Save RDP password for retrieval
   ansible.builtin.copy:
     content: "{{ rdp_password }}"
