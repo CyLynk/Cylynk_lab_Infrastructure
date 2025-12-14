@@ -41,6 +41,8 @@ define(["jquery", "core/str"], function ($, Str) {
     { key: "button:terminate", component: "local_attackbox" },
     { key: "button:tooltip", component: "local_attackbox" },
     { key: "button:tooltip_active", component: "local_attackbox" },
+    { key: "button:usage_dashboard", component: "local_attackbox" },
+    { key: "timer:time_remaining", component: "local_attackbox" },
     { key: "overlay:title", component: "local_attackbox" },
     { key: "overlay:subtitle", component: "local_attackbox" },
     { key: "overlay:cancel", component: "local_attackbox" },
@@ -84,6 +86,10 @@ define(["jquery", "core/str"], function ($, Str) {
       this.isLaunching = false;
       this.hasActiveSession = false;
       this.activeSessionUrl = null;
+      this.lastQuotaWarning = null; // Track last warning level shown
+      this.currentUsageData = null; // Store latest usage data
+      this.sessionExpiresAt = null; // Track when session expires
+      this.timerInterval = null; // Timer update interval
 
       this.init();
     }
@@ -94,6 +100,8 @@ define(["jquery", "core/str"], function ($, Str) {
     init() {
       this.createButton();
       this.createOverlay();
+      this.createNotificationBanner();
+      this.createUsageDashboardLink();
       this.bindEvents();
       this.updateUsageDisplay();
 
@@ -114,13 +122,17 @@ define(["jquery", "core/str"], function ($, Str) {
     async checkExistingSession() {
       try {
         const tokenData = await this.getToken();
-        const response = await fetch(tokenData.api_url + "/sessions/status", {
-          method: "GET",
-          headers: {
-            "X-Moodle-Token": tokenData.token,
-            Accept: "application/json",
-          },
-        });
+        // Use the correct endpoint: GET /students/{studentId}/sessions
+        const response = await fetch(
+          tokenData.api_url + "/students/" + this.config.userId + "/sessions",
+          {
+            method: "GET",
+            headers: {
+              "X-Moodle-Token": tokenData.token,
+              Accept: "application/json",
+            },
+          }
+        );
 
         if (!response.ok) {
           // No existing session or error - keep default state
@@ -129,34 +141,77 @@ define(["jquery", "core/str"], function ($, Str) {
 
         const data = await response.json();
 
+        // Check if there are any active sessions
         if (
-          data.session &&
-          (data.session.status === "ready" || data.session.status === "running")
+          data.data &&
+          data.data.active_sessions &&
+          data.data.active_sessions.length > 0
         ) {
+          // Get the first active session
+          const session = data.data.active_sessions[0];
+
           // Found an active session - update UI without showing overlay
-          this.sessionId = data.session.session_id;
+          this.sessionId = session.session_id;
           this.hasActiveSession = true;
 
-          // Get connection URL
-          this.activeSessionUrl = null;
-          if (data.session.connection_info) {
-            this.activeSessionUrl =
-              data.session.connection_info.direct_url ||
-              data.session.connection_info.guacamole_connection_url;
-          }
-          if (!this.activeSessionUrl) {
-            this.activeSessionUrl = data.session.direct_url;
-          }
+          // Get connection URL - try multiple locations
+          this.activeSessionUrl =
+            session?.connection_info?.direct_url ||
+            session?.connection_info?.guacamole_connection_url ||
+            session?.connection_info?.guacamole_url ||
+            session?.direct_url ||
+            session?.guacamole_url ||
+            session?.url ||
+            session?.connection_url ||
+            null;
 
-          // Update button state
-          this.$button.addClass("attackbox-btn-active");
-          this.$button
-            .find(".attackbox-btn-text")
-            .text(this.strings.buttonTextActive);
-          this.$button.attr("title", this.strings.buttonTooltipActive);
-          this.$terminateButton.show();
+          console.log("Session found on page load:", {
+            sessionId: this.sessionId,
+            status: session.status,
+            hasUrl: !!this.activeSessionUrl,
+            session: session,
+          });
 
-          console.log("Existing session restored:", this.sessionId);
+          // Check if session is ready with URL
+          if (this.activeSessionUrl) {
+            // Session is ready - update UI immediately
+            this.$button.addClass("attackbox-btn-active");
+            this.$button
+              .find(".attackbox-btn-text")
+              .text(this.strings.buttonTextActive);
+            this.$button.attr("title", this.strings.buttonTooltipActive);
+
+            // Show terminate button
+            this.$terminateButton.show();
+            console.log("Terminate button shown");
+
+            // Start timer if expires_at available
+            if (session.expires_at) {
+              this.startSessionTimer(session.expires_at);
+            }
+
+            console.log("Existing session restored:", this.sessionId);
+          } else if (
+            session.status === "provisioning" ||
+            session.status === "pending"
+          ) {
+            // Session exists but not ready yet - start polling to complete the launch
+            console.log(
+              "Session found but still provisioning, resuming polling..."
+            );
+            this.isLaunching = true;
+            this.showOverlay();
+
+            // Start polling to monitor session progress
+            this.startPolling(tokenData.api_url);
+          } else {
+            // Session exists but in unexpected state
+            console.warn(
+              "Session found in unexpected state:",
+              session.status,
+              session
+            );
+          }
         }
       } catch (error) {
         console.log("No existing session found or error checking:", error);
@@ -210,6 +265,48 @@ define(["jquery", "core/str"], function ($, Str) {
       this.$button = $("#attackbox-btn");
       this.$terminateButton = $("#attackbox-terminate-btn");
       this.$launcher = $("#attackbox-launcher");
+      this.$timerBadge = $("#attackbox-timer-badge");
+      this.$timerText = $("#attackbox-timer-text");
+    }
+
+    /**
+     * Create notification banner for quota warnings
+     */
+    createNotificationBanner() {
+      const html = `
+        <div id="attackbox-quota-notification" class="attackbox-quota-notification" style="display: none;">
+          <div class="attackbox-notification-content">
+            <span class="attackbox-notification-icon">⚠️</span>
+            <span id="attackbox-notification-message" class="attackbox-notification-message"></span>
+            <button id="attackbox-notification-close" class="attackbox-notification-close" type="button">×</button>
+          </div>
+        </div>
+      `;
+      $("body").append(html);
+      this.$notification = $("#attackbox-quota-notification");
+      this.$notificationMessage = $("#attackbox-notification-message");
+
+      // Close button handler
+      $("#attackbox-notification-close").on("click", () => {
+        this.$notification.fadeOut(300);
+      });
+    }
+
+    /**
+     * Create usage dashboard link
+     */
+    createUsageDashboardLink() {
+      const html = `
+        <a href="${M.cfg.wwwroot}/local/attackbox/usage.php" 
+           id="attackbox-usage-link" 
+           class="attackbox-usage-link" 
+           title="${this.strings.buttonUsageDashboard}"
+           target="_blank">
+          <span class="attackbox-usage-link-icon">📊</span>
+          <span class="attackbox-usage-link-text">Usage</span>
+        </a>
+      `;
+      this.$launcher.append(html);
     }
 
     /**
@@ -375,6 +472,11 @@ define(["jquery", "core/str"], function ($, Str) {
         return;
       }
 
+      // Check quota before launching
+      if (!this.checkQuotaBeforeLaunch()) {
+        return;
+      }
+
       this.isLaunching = true;
       this.showOverlay();
       this.updateProgress(0, this.strings.progress5);
@@ -398,19 +500,24 @@ define(["jquery", "core/str"], function ($, Str) {
           throw new Error(sessionData.message || "Invalid response from API");
         }
 
-        if (session.reused) {
-          // Existing session found
-          this.handleExistingSession(session);
-          return;
-        }
-
         this.sessionId = session.session_id;
 
-        if (session.status === "ready") {
-          // Already ready (warm pool)
-          this.handleReady(session);
+        // Check session status regardless of whether it was reused
+        if (session.status === "ready" || session.status === "active") {
+          // Session is ready to use
+          if (session.reused) {
+            this.handleExistingSession(session);
+          } else {
+            this.handleReady(session);
+          }
         } else {
-          // Start polling
+          // Session is still provisioning - start polling
+          if (session.reused) {
+            this.updateProgress(
+              25,
+              "Waiting for existing session to be ready..."
+            );
+          }
           this.startPolling(tokenData.api_url);
         }
       } catch (error) {
@@ -469,28 +576,32 @@ define(["jquery", "core/str"], function ($, Str) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.log("API error response:", errorData);
 
         // Handle quota exceeded error (403)
-        if (
-          response.status === 403 &&
-          errorData.data &&
-          errorData.data.error === "quota_exceeded"
-        ) {
-          const quota = errorData.data;
-          const hoursUsed = Math.round((quota.consumed_minutes / 60) * 10) / 10;
-          const hoursLimit = Math.round((quota.quota_minutes / 60) * 10) / 10;
-          const resetDate = new Date(quota.resets_at).toLocaleDateString();
+        // Check errorData.details (Lambda response structure)
+        const quotaData = errorData.details || errorData.data || errorData;
+        if (response.status === 403 && quotaData.error === "quota_exceeded") {
+          const hoursUsed =
+            Math.round((quotaData.consumed_minutes / 60) * 10) / 10;
+          const hoursLimit =
+            Math.round((quotaData.quota_minutes / 60) * 10) / 10;
+          const resetDate = new Date(quotaData.resets_at).toLocaleDateString();
 
           throw new Error(
             `Monthly usage limit reached!<br><br>` +
-              `<strong>Plan:</strong> ${quota.plan || "Freemium"}<br>` +
+              `<strong>Plan:</strong> ${quotaData.plan || "Freemium"}<br>` +
               `<strong>Used:</strong> ${hoursUsed}h / ${hoursLimit}h<br><br>` +
               `Your quota resets on <strong>${resetDate}</strong>.<br><br>` +
               `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`
           );
         }
 
-        throw new Error(errorData.message || `API error: ${response.status}`);
+        throw new Error(
+          errorData.error ||
+            errorData.message ||
+            `API error: ${response.status}`
+        );
       }
 
       return await response.json();
@@ -612,16 +723,26 @@ define(["jquery", "core/str"], function ($, Str) {
       this.isLaunching = false;
       this.hasActiveSession = true;
 
+      console.log("Full session object:", session);
+
+      // Verify session is actually ready
+      if (session.status !== "ready" && session.status !== "active") {
+        console.warn("Session not ready yet, status:", session.status);
+        this.showError(
+          `Session is ${session.status}. Please wait a moment and try again.`
+        );
+        return;
+      }
+
       // Try multiple possible URL locations
-      this.activeSessionUrl = null;
-      if (session.connection_info) {
-        this.activeSessionUrl =
-          session.connection_info.direct_url ||
-          session.connection_info.guacamole_connection_url;
-      }
-      if (!this.activeSessionUrl) {
-        this.activeSessionUrl = session.direct_url;
-      }
+      this.activeSessionUrl =
+        session?.connection_info?.direct_url ||
+        session?.connection_info?.guacamole_connection_url ||
+        session?.direct_url ||
+        session?.guacamole_url ||
+        session?.url ||
+        session?.connection_url ||
+        null;
 
       console.log("Existing session found, URL:", this.activeSessionUrl);
 
@@ -636,13 +757,19 @@ define(["jquery", "core/str"], function ($, Str) {
         this.$button.attr("title", this.strings.buttonTooltipActive);
         this.$terminateButton.show();
 
+        // Start session timer if expires_at available
+        if (session.expires_at) {
+          this.startSessionTimer(session.expires_at);
+        }
+
         setTimeout(() => {
           this.showSuccess();
         }, 500);
       } else {
         console.error("No connection URL in session:", session);
+        console.error("Available keys:", Object.keys(session));
         this.showError(
-          "Session found but no connection URL available. Check console for details."
+          "Session found but no connection URL available. Please check CloudWatch logs or try terminating and creating a new session."
         );
       }
     }
@@ -654,16 +781,17 @@ define(["jquery", "core/str"], function ($, Str) {
       this.isLaunching = false;
       this.hasActiveSession = true;
 
+      console.log("Full session object (ready):", session);
+
       // Try multiple possible URL locations
-      this.activeSessionUrl = null;
-      if (session.connection_info) {
-        this.activeSessionUrl =
-          session.connection_info.direct_url ||
-          session.connection_info.guacamole_connection_url;
-      }
-      if (!this.activeSessionUrl) {
-        this.activeSessionUrl = session.direct_url;
-      }
+      this.activeSessionUrl =
+        session?.connection_info?.direct_url ||
+        session?.connection_info?.guacamole_connection_url ||
+        session?.direct_url ||
+        session?.guacamole_url ||
+        session?.url ||
+        session?.connection_url ||
+        null;
 
       console.log("LynkBox ready, URL:", this.activeSessionUrl);
 
@@ -678,14 +806,20 @@ define(["jquery", "core/str"], function ($, Str) {
         this.$button.attr("title", this.strings.buttonTooltipActive);
         this.$terminateButton.show();
 
+        // Start session timer if expires_at available
+        if (session.expires_at) {
+          this.startSessionTimer(session.expires_at);
+        }
+
         // Show success then open window
         setTimeout(() => {
           this.showSuccess();
         }, 500);
       } else {
         console.error("No connection URL in session:", session);
+        console.error("Available keys:", Object.keys(session));
         this.showError(
-          "LynkBox is ready but no connection URL available. Check console for details."
+          "LynkBox is ready but no connection URL available. Please check CloudWatch logs or contact support."
         );
       }
     }
@@ -787,6 +921,12 @@ define(["jquery", "core/str"], function ($, Str) {
           return;
         }
 
+        // Store current usage data
+        this.currentUsageData = data;
+
+        // Check for quota warnings
+        this.checkQuotaWarnings(data);
+
         // Update the badge
         const $badge = $("#attackbox-usage-badge");
         const $badgeText = $badge.find(".attackbox-usage-text");
@@ -822,6 +962,88 @@ define(["jquery", "core/str"], function ($, Str) {
     }
 
     /**
+     * Check quota levels and show warnings
+     */
+    checkQuotaWarnings(data) {
+      // Skip if unlimited plan
+      if (data.hours_limit === "Unlimited" || data.percentage === undefined) {
+        return;
+      }
+
+      const percentage = data.percentage;
+      let warningLevel = null;
+      let message = "";
+
+      // Determine warning level
+      if (percentage >= 100) {
+        warningLevel = "critical";
+        message = `<strong>Quota Exhausted!</strong> You've used all ${data.hours_limit}h of your ${data.plan} plan. Quota resets ${data.reset_date}.`;
+      } else if (percentage >= 90) {
+        warningLevel = "high";
+        message = `<strong>Low on Time!</strong> Only ${data.hours_remaining}h remaining of your ${data.hours_limit}h ${data.plan} quota.`;
+      } else if (percentage >= 80) {
+        warningLevel = "medium";
+        message = `<strong>Heads up!</strong> You've used ${data.hours_used}h of ${data.hours_limit}h. ${data.hours_remaining}h remaining.`;
+      }
+
+      // Show notification if warning level changed
+      if (warningLevel && warningLevel !== this.lastQuotaWarning) {
+        this.showQuotaWarning(message, warningLevel);
+        this.lastQuotaWarning = warningLevel;
+      }
+    }
+
+    /**
+     * Show quota warning notification
+     */
+    showQuotaWarning(message, level) {
+      this.$notificationMessage.html(message);
+      this.$notification
+        .removeClass("warning-medium warning-high warning-critical")
+        .addClass(`warning-${level}`);
+      this.$notification.fadeIn(300);
+
+      // Auto-hide medium warnings after 10 seconds
+      if (level === "medium") {
+        setTimeout(() => {
+          this.$notification.fadeOut(300);
+        }, 10000);
+      }
+      // Keep high/critical warnings visible
+    }
+
+    /**
+     * Check quota before launching
+     */
+    checkQuotaBeforeLaunch() {
+      if (!this.currentUsageData) {
+        return true; // No data yet, allow launch
+      }
+
+      const data = this.currentUsageData;
+
+      // Check if quota exhausted
+      if (data.hours_limit !== "Unlimited" && data.percentage >= 100) {
+        this.showError(
+          `Monthly usage limit reached!<br><br>` +
+            `<strong>Plan:</strong> ${data.plan}<br>` +
+            `<strong>Used:</strong> ${data.hours_used}h / ${data.hours_limit}h<br><br>` +
+            `Your quota resets on <strong>${data.reset_date}</strong>.<br><br>` +
+            `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`
+        );
+        return false;
+      }
+
+      // Warn if very low (< 10 minutes remaining)
+      if (data.hours_limit !== "Unlimited" && data.minutes_remaining < 10) {
+        const confirmMsg = `You only have ${data.minutes_remaining} minutes remaining in your quota. Continue?`;
+        return confirm(confirmMsg);
+      }
+
+      return true;
+    }
+
+    /**
      * Show error message
      */
     showError(message) {
@@ -851,6 +1073,99 @@ define(["jquery", "core/str"], function ($, Str) {
     }
 
     /**
+     * Start session timer countdown
+     * @param {string} expiresAt ISO 8601 timestamp when session expires
+     */
+    startSessionTimer(expiresAt) {
+      this.sessionExpiresAt = new Date(expiresAt);
+      this.stopSessionTimer(); // Clear any existing timer
+
+      // Update immediately
+      this.updateTimerDisplay();
+
+      // Update every second
+      this.timerInterval = setInterval(() => {
+        this.updateTimerDisplay();
+      }, 1000);
+
+      // Show timer badge
+      this.$timerBadge.fadeIn(300);
+    }
+
+    /**
+     * Stop session timer
+     */
+    stopSessionTimer() {
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
+      this.sessionExpiresAt = null;
+      this.$timerBadge.fadeOut(300);
+    }
+
+    /**
+     * Update timer display
+     */
+    updateTimerDisplay() {
+      if (!this.sessionExpiresAt) {
+        return;
+      }
+
+      const now = new Date();
+      const remaining = this.sessionExpiresAt - now;
+
+      if (remaining <= 0) {
+        // Session expired
+        this.$timerText.text("Expired");
+        this.$timerBadge.addClass("timer-expired");
+        this.stopSessionTimer();
+
+        // Auto-terminate expired session
+        setTimeout(() => {
+          this.sessionId = null;
+          this.hasActiveSession = false;
+          this.activeSessionUrl = null;
+          this.$button.removeClass("attackbox-btn-active");
+          this.$button
+            .find(".attackbox-btn-text")
+            .text(this.strings.buttonText);
+          this.$button.attr("title", this.strings.buttonTooltip);
+          this.$terminateButton.hide();
+          alert("Your session has expired. Please launch a new session.");
+        }, 2000);
+        return;
+      }
+
+      // Calculate hours and minutes
+      const totalMinutes = Math.floor(remaining / (1000 * 60));
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      // Format display
+      let timeText;
+      if (hours > 0) {
+        timeText = `${hours}h ${minutes}m`;
+      } else {
+        timeText = `${minutes}m`;
+      }
+
+      this.$timerText.text(timeText);
+
+      // Color coding based on time remaining
+      this.$timerBadge.removeClass(
+        "timer-low timer-medium timer-high timer-expired"
+      );
+      if (totalMinutes <= 5) {
+        this.$timerBadge.addClass("timer-low");
+      } else if (totalMinutes <= 15) {
+        this.$timerBadge.addClass("timer-medium");
+      } else {
+        this.$timerBadge.addClass("timer-high");
+      }
+    }
+
+    /**
      * Terminate the current session
      */
     async terminateSession() {
@@ -865,6 +1180,13 @@ define(["jquery", "core/str"], function ($, Str) {
       }
 
       try {
+        // Show loading state on button
+        const $btnText = this.$terminateButton.find(".attackbox-btn-text");
+        const originalText = $btnText.text();
+        this.$terminateButton.prop("disabled", true);
+        this.$terminateButton.css("opacity", "0.6");
+        $btnText.html('<span class="spinner"></span> Ending...');
+
         // Get token first
         const tokenData = await this.getToken();
 
@@ -893,16 +1215,29 @@ define(["jquery", "core/str"], function ($, Str) {
         this.hasActiveSession = false;
         this.activeSessionUrl = null;
 
+        // Stop timer
+        this.stopSessionTimer();
+
         // Update UI
         this.$button.removeClass("attackbox-btn-active");
         this.$button.find(".attackbox-btn-text").text(this.strings.buttonText);
         this.$button.attr("title", this.strings.buttonTooltip);
         this.$terminateButton.hide();
+        this.$terminateButton.prop("disabled", false);
+        this.$terminateButton.css("opacity", "1");
 
         // Show success message
         alert(this.strings.terminateSuccess);
       } catch (error) {
         console.error("Terminate session error:", error);
+
+        // Restore button state on error
+        this.$terminateButton.prop("disabled", false);
+        this.$terminateButton.css("opacity", "1");
+        this.$terminateButton
+          .find(".attackbox-btn-text")
+          .text(this.strings.buttonTerminate);
+
         alert(this.strings.terminateError + ": " + error.message);
       }
     }
@@ -921,6 +1256,8 @@ define(["jquery", "core/str"], function ($, Str) {
         "buttonTerminate",
         "buttonTooltip",
         "buttonTooltipActive",
+        "buttonUsageDashboard",
+        "timerTimeRemaining",
         "overlayTitle",
         "overlaySubtitle",
         "cancelButton",

@@ -1,6 +1,6 @@
 <?php
 /**
- * AJAX endpoint to get AttackBox usage statistics
+ * AJAX endpoint to get session history
  *
  * @package    local_attackbox
  * @copyright  2025 CyberLab
@@ -19,7 +19,6 @@ header('Content-Type: application/json');
 try {
     // Get plugin configuration
     $api_url = get_config('local_attackbox', 'api_url');
-    $api_key = get_config('local_attackbox', 'api_key');
 
     if (empty($api_url)) {
         throw new moodle_exception('API URL not configured');
@@ -29,17 +28,17 @@ try {
     $token_manager = new \local_attackbox\token_manager();
     $token = $token_manager->generate_token($USER);
 
-    // Call orchestrator API
-    $usage_url = rtrim($api_url, '/') . '/usage';
+    // Call orchestrator API for session history
+    $history_url = rtrim($api_url, '/') . '/sessions/history';
 
-    $ch = curl_init($usage_url);
+    $ch = curl_init($history_url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             'X-Moodle-Token: ' . $token,
             'Content-Type: application/json',
         ],
-        CURLOPT_TIMEOUT => 10,
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
 
@@ -64,32 +63,48 @@ try {
         exit;
     }
 
-    // Parse and format response
+    // Parse response
     $data = json_decode($response, true);
 
     if (!$data || !isset($data['data'])) {
         throw new moodle_exception('Invalid API response');
     }
 
-    $usage = $data['data'];
+    $history = $data['data'];
 
-    // Format for frontend
-    $formatted = [
+    // Format sessions for display
+    $sessions = [];
+    if (isset($history['sessions']) && is_array($history['sessions'])) {
+        foreach ($history['sessions'] as $session) {
+            $started = !empty($session['created_at']) ? strtotime($session['created_at']) : null;
+            $ended = !empty($session['terminated_at']) ? strtotime($session['terminated_at']) : null;
+
+            $duration_minutes = 0;
+            if ($started && $ended) {
+                $duration_minutes = round(($ended - $started) / 60);
+            }
+
+            $sessions[] = [
+                'session_id' => $session['session_id'] ?? 'N/A',
+                'started_at' => $started ? date('Y-m-d H:i:s', $started) : 'N/A',
+                'ended_at' => $ended ? date('Y-m-d H:i:s', $ended) : 'Active',
+                'duration_minutes' => $duration_minutes,
+                'duration_display' => $duration_minutes > 0 ?
+                    floor($duration_minutes / 60) . 'h ' . ($duration_minutes % 60) . 'm' :
+                    'N/A',
+                'status' => $session['status'] ?? 'unknown',
+            ];
+        }
+    }
+
+    // Return formatted data
+    echo json_encode([
         'success' => true,
-        'plan' => ucfirst($usage['plan'] ?? 'freemium'),
-        'quota_minutes' => $usage['quota_minutes'] ?? 0,
-        'consumed_minutes' => $usage['consumed_minutes'] ?? 0,
-        'remaining_minutes' => $usage['remaining_minutes'] ?? 0,
-        'session_count' => $usage['session_count'] ?? 0,
-        'hours_used' => round(($usage['consumed_minutes'] ?? 0) / 60, 1),
-        'hours_limit' => $usage['quota_minutes'] === -1 ? 'Unlimited' : round(($usage['quota_minutes'] ?? 0) / 60, 1),
-        'hours_remaining' => $usage['quota_minutes'] === -1 ? 'Unlimited' : round(($usage['remaining_minutes'] ?? 0) / 60, 1),
-        'percentage' => $usage['quota_minutes'] > 0 ? round((($usage['consumed_minutes'] ?? 0) / $usage['quota_minutes']) * 100) : 0,
-        'resets_at' => $usage['resets_at'] ?? '',
-        'reset_date' => !empty($usage['resets_at']) ? date('F j, Y', strtotime($usage['resets_at'])) : 'Unknown',
-    ];
-
-    echo json_encode($formatted);
+        'sessions' => $sessions,
+        'total_sessions' => count($sessions),
+        'total_minutes' => $history['total_minutes'] ?? 0,
+        'total_hours' => round(($history['total_minutes'] ?? 0) / 60, 1),
+    ]);
 
 } catch (Exception $e) {
     http_response_code(500);

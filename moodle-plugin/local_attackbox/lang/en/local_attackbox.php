@@ -79,6 +79,10 @@ $string['button:active'] = 'Open LynkBox';
 $string['button:terminate'] = 'End Session';
 $string['button:tooltip'] = 'Launch your personal Kali Linux hacking environment in the browser. No installation required!';
 $string['button:tooltip_active'] = 'Click to open LynkBox or end your current session';
+$string['button:usage_dashboard'] = 'View usage history and statistics';
+
+// Timer text.
+$string['timer:time_remaining'] = 'Time remaining';
 
 // Overlay text.
 $string['overlay:title'] = 'Deploying LynkBox';
@@ -116,4 +120,23 @@ $string['progress:100'] = 'LynkBox ready — launching now 🚀';
 
 // Privacy.
 $string['privacy:metadata'] = 'The AttackBox Launcher plugin does not store any personal data locally. User information is transmitted to the CyberLab Orchestrator API for session management.';
+
+// Usage Dashboard.
+$string['usage:dashboard_title'] = 'LynkBox Usage Dashboard';
+$string['usage:current_quota'] = 'Current Quota';
+$string['usage:plan'] = 'Plan';
+$string['usage:used'] = 'Used';
+$string['usage:remaining'] = 'Remaining';
+$string['usage:resets_on'] = 'Resets on';
+$string['usage:session_history'] = 'Session History';
+$string['usage:no_sessions'] = 'No sessions found';
+$string['usage:session_id'] = 'Session ID';
+$string['usage:started_at'] = 'Started';
+$string['usage:ended_at'] = 'Ended';
+$string['usage:duration'] = 'Duration';
+$string['usage:status'] = 'Status';
+$string['usage:total_sessions'] = 'Total Sessions';
+$string['usage:loading'] = 'Loading usage data...';
+$string['usage:error'] = 'Failed to load usage data';
+$string['usage:unlimited'] = 'Unlimited';
 

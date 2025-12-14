@@ -325,6 +325,12 @@ resource "aws_cloudwatch_log_group" "get_usage" {
   tags              = local.common_tags
 }
 
+resource "aws_cloudwatch_log_group" "usage_history" {
+  name              = "/aws/lambda/${local.function_name_prefix}-usage-history"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
 # =============================================================================
 # Lambda Functions
 # =============================================================================
@@ -581,14 +587,61 @@ resource "aws_lambda_function" "get_usage" {
   )
 }
 
+# Usage History Lambda
+resource "aws_lambda_function" "usage_history" {
+  filename         = "${path.module}/lambda/packages/usage-history.zip"
+  function_name    = "${local.function_name_prefix}-usage-history"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 128
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/usage-history.zip") ? filebase64sha256("${path.module}/lambda/packages/usage-history.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      SESSIONS_TABLE        = aws_dynamodb_table.sessions.name
+      MOODLE_WEBHOOK_SECRET = var.moodle_webhook_secret
+      REQUIRE_MOODLE_AUTH   = tostring(var.require_moodle_auth)
+      ENVIRONMENT           = var.environment
+      PROJECT_NAME          = var.project_name
+      AWS_REGION_NAME       = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.usage_history]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-usage-history"
+    }
+  )
+}
+
 # =============================================================================
 # EventBridge Schedule for Pool Manager
 # =============================================================================
 
 resource "aws_cloudwatch_event_rule" "pool_manager_schedule" {
   name                = "${local.function_name_prefix}-pool-manager-schedule"
-  description         = "Trigger pool manager every 5 minutes for cleanup and scaling"
-  schedule_expression = "rate(5 minutes)"
+  description         = "Trigger pool manager every 1 minute for cleanup and scaling"
+  schedule_expression = "rate(1 minute)"
 
   tags = local.common_tags
 }
@@ -760,6 +813,35 @@ resource "aws_lambda_permission" "get_usage_apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_usage.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}
+
+# Usage History Integration
+resource "aws_apigatewayv2_integration" "usage_history" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.usage_history.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "usage_history" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "GET /sessions/history"
+  target    = "integrations/${aws_apigatewayv2_integration.usage_history.id}"
+}
+
+resource "aws_apigatewayv2_route" "user_usage_history" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "GET /sessions/history/{userId}"
+  target    = "integrations/${aws_apigatewayv2_integration.usage_history.id}"
+}
+
+resource "aws_lambda_permission" "usage_history_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.usage_history.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
 }

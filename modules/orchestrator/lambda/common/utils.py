@@ -204,6 +204,36 @@ class DynamoDBClient:
         except ClientError as e:
             logger.error(f"DynamoDB query error: {e}")
             return []
+    
+    def query_user_sessions(self, user_id: str, limit: int = 50, status_filter: Optional[str] = None) -> list:
+        """
+        Query all sessions for a specific user using the StudentIndex GSI.
+        
+        Args:
+            user_id: The student/user ID to query sessions for
+            limit: Maximum number of sessions to return
+            status_filter: Optional status to filter by (e.g., 'terminated', 'ready')
+        
+        Returns:
+            List of session items from DynamoDB
+        """
+        try:
+            query_kwargs = {
+                "IndexName": "StudentIndex",
+                "KeyConditionExpression": Key("student_id").eq(user_id),
+                "Limit": limit,
+                "ScanIndexForward": False,  # Most recent first
+            }
+            
+            # Add status filter if provided
+            if status_filter:
+                query_kwargs["FilterExpression"] = Attr("status").eq(status_filter)
+            
+            response = self.table.query(**query_kwargs)
+            return response.get("Items", [])
+        except ClientError as e:
+            logger.error(f"DynamoDB query_user_sessions error: {e}")
+            return []
 
 
 class UsageTracker:
@@ -379,13 +409,80 @@ class EC2Client:
         self.ec2_resource = boto3.resource("ec2", region_name=AWS_REGION)
     
     def get_instance_status(self, instance_id: str) -> Optional[Dict[str, Any]]:
-        """Get EC2 instance status."""
+        """Get EC2 instance status with health checks."""
         try:
+            # Get basic instance info
             response = self.ec2.describe_instances(InstanceIds=[instance_id])
             reservations = response.get("Reservations", [])
-            if reservations and reservations[0].get("Instances"):
-                return reservations[0]["Instances"][0]
-            return None
+            if not reservations or not reservations[0].get("Instances"):
+                return None
+            
+            instance = reservations[0]["Instances"][0]
+            
+            # Get instance status checks (system + instance reachability)
+            try:
+                status_response = self.ec2.describe_instance_status(
+                    InstanceIds=[instance_id],
+                    IncludeAllInstances=False  # Only running instances
+                )
+                
+                if status_response.get("InstanceStatuses"):
+                    status_info = status_response["InstanceStatuses"][0]
+                    
+                    # Extract status check results
+                    system_status_obj = status_info.get("SystemStatus", {})
+                    instance_status_obj = status_info.get("InstanceStatus", {})
+                    
+                    system_status = system_status_obj.get("Status", "unknown")
+                    instance_status = instance_status_obj.get("Status", "unknown")
+                    
+                    # Get detailed checks (this is what shows as 3/3 in console)
+                    system_details = system_status_obj.get("Details", [])
+                    instance_details = instance_status_obj.get("Details", [])
+                    
+                    # Count passed checks
+                    total_checks = len(system_details) + len(instance_details)
+                    passed_checks = sum(
+                        1 for check in (system_details + instance_details)
+                        if check.get("Status") == "passed"
+                    )
+                    
+                    # Consider "insufficient-data" as acceptable (status checks may not report immediately)
+                    # Only "impaired" or "failed" is a real failure
+                    system_ok = system_status in ["ok", "insufficient-data", "not-applicable"]
+                    instance_ok = instance_status in ["ok", "insufficient-data", "not-applicable"]
+                    
+                    # All passed if both statuses OK or all individual checks passed
+                    all_passed = (system_ok and instance_ok) or (total_checks > 0 and passed_checks == total_checks)
+                    
+                    # Add health check info to instance data
+                    instance["HealthChecks"] = {
+                        "system_status": system_status,
+                        "instance_status": instance_status,
+                        "passed_checks": passed_checks,
+                        "total_checks": total_checks,
+                        "all_passed": all_passed
+                    }
+                    
+                    logger.info(f"Instance {instance_id} health: {passed_checks}/{total_checks} checks passed, "
+                               f"system={system_status}, instance={instance_status}")
+                else:
+                    # Instance exists but no status checks yet (likely just started)
+                    instance["HealthChecks"] = {
+                        "system_status": "initializing",
+                        "instance_status": "initializing",
+                        "all_passed": False
+                    }
+            except ClientError as status_error:
+                logger.warning(f"Could not get status checks for {instance_id}: {status_error}")
+                # Instance might not be running yet
+                instance["HealthChecks"] = {
+                    "system_status": "unknown",
+                    "instance_status": "unknown",
+                    "all_passed": False
+                }
+            
+            return instance
         except ClientError as e:
             logger.error(f"EC2 describe_instances error: {e}")
             return None
