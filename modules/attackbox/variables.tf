@@ -137,23 +137,25 @@ variable "scale_down_cooldown" {
   default     = 600
 }
 
-# Scheduled Scaling
-variable "enable_scheduled_scaling" {
-  description = "Enable scheduled scaling for off-hours"
-  type        = bool
-  default     = false
+# Warm Pool Configuration
+variable "warm_pool_min_size" {
+  description = "Minimum number of instances to keep in warm pool (stopped state)"
+  type        = number
+  default     = 5
+  validation {
+    condition     = var.warm_pool_min_size >= 0
+    error_message = "Warm pool min size must be non-negative."
+  }
 }
 
-variable "offhours_min_size" {
-  description = "Minimum pool size during off-hours"
+variable "warm_pool_max_group_prepared_capacity" {
+  description = "Maximum combined capacity of running instances + warm pool instances"
   type        = number
-  default     = 0
-}
-
-variable "offhours_desired_size" {
-  description = "Desired pool size during off-hours"
-  type        = number
-  default     = 2
+  default     = 15
+  validation {
+    condition     = var.warm_pool_max_group_prepared_capacity > 0
+    error_message = "Warm pool max group prepared capacity must be positive."
+  }
 }
 
 # Monitoring

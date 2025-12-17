@@ -324,25 +324,42 @@ def manage_scaling(sessions_db, pool_db, asg_client) -> dict:
         available_instances = pool_db.query_by_index("StatusIndex", "status", InstanceStatus.AVAILABLE)
         available_count = len(available_instances)
         
+        # Count instances that are already starting (being provisioned)
+        # This prevents duplicate scale-ups while instances are booting
+        starting_instances = pool_db.query_by_index("StatusIndex", "status", InstanceStatus.STARTING)
+        starting_count = len(starting_instances)
+        
+        # Count assigned instances (already serving sessions)
+        assigned_instances = pool_db.query_by_index("StatusIndex", "status", InstanceStatus.ASSIGNED)
+        assigned_count = len(assigned_instances)
+        
         # Get ASG capacity
         capacity = asg_client.get_asg_capacity(ASG_NAME)
         
-        logger.info(f"Scaling check: active_sessions={active_count}, available_instances={available_count}, "
+        logger.info(f"Scaling check: active_sessions={active_count}, available={available_count}, "
+                    f"starting={starting_count}, assigned={assigned_count}, "
                     f"asg_desired={capacity['desired']}, asg_min={capacity['min']}, asg_max={capacity['max']}")
         
-        # Scale up if we have pending sessions but no available instances
-        if active_count > 0 and available_count == 0:
+        # Calculate how many instances are "in progress" (either available, starting, or assigned)
+        instances_in_progress = available_count + starting_count + assigned_count
+        
+        # Scale up only if we have more active sessions than instances that can serve them
+        # AND there are no instances currently starting (to prevent duplicate scale-ups)
+        if active_count > instances_in_progress and starting_count == 0:
             if capacity["desired"] < capacity["max"]:
-                new_capacity = min(capacity["desired"] + 1, capacity["max"])
+                # Scale up by the deficit, but at most 2 at a time to avoid over-provisioning
+                deficit = active_count - instances_in_progress
+                scale_amount = min(deficit, 2)
+                new_capacity = min(capacity["desired"] + scale_amount, capacity["max"])
                 if asg_client.set_desired_capacity(ASG_NAME, new_capacity):
                     action = {
                         "type": "scale_up",
-                        "reason": "No available instances for active sessions",
+                        "reason": f"Active sessions ({active_count}) > instances in progress ({instances_in_progress})",
                         "new_capacity": new_capacity,
                     }
                     logger.info(f"Scaled up ASG to {new_capacity}")
         
-        # Scale down if we have too many idle instances
+        # Scale down if we have too many idle instances and no active sessions
         elif available_count > 2 and active_count == 0:
             # Keep at least min_size
             if capacity["desired"] > capacity["min"]:

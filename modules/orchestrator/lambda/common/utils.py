@@ -184,6 +184,48 @@ class DynamoDBClient:
             logger.error(f"DynamoDB update_item error: {e}")
             return False
     
+    def conditional_update(
+        self, 
+        key: Dict[str, Any], 
+        updates: Dict[str, Any], 
+        condition_expression: str,
+        expression_attribute_names: Optional[Dict[str, str]] = None,
+        expression_attribute_values: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Update an item in DynamoDB with a condition (for pessimistic locking).
+        Returns True if update succeeded, False if condition failed or error occurred.
+        """
+        try:
+            update_expression = "SET " + ", ".join(f"#{k} = :{k}" for k in updates.keys())
+            
+            # Merge expression attribute names
+            expr_names = {f"#{k}": k for k in updates.keys()}
+            if expression_attribute_names:
+                expr_names.update(expression_attribute_names)
+            
+            # Merge expression attribute values
+            expr_values = {f":{k}": v for k, v in updates.items()}
+            if expression_attribute_values:
+                expr_values.update(expression_attribute_values)
+            
+            self.table.update_item(
+                Key=key,
+                UpdateExpression=update_expression,
+                ConditionExpression=condition_expression,
+                ExpressionAttributeNames=expr_names,
+                ExpressionAttributeValues=expr_values,
+            )
+            return True
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                # Condition failed - this is expected in race conditions
+                logger.debug(f"Conditional update failed for key {key}: condition not met")
+                return False
+            else:
+                logger.error(f"DynamoDB conditional_update error: {e}")
+                return False
+    
     def delete_item(self, key: Dict[str, Any]) -> bool:
         """Delete an item from DynamoDB."""
         try:

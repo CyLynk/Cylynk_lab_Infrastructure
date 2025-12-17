@@ -339,59 +339,99 @@ def handler(event, context):
             return error_response(500, "Failed to create session record")
         
         # Try to find an available instance from the pool
+        # Use pessimistic locking to prevent race conditions
         instance_id = None
         instance_ip = None
+        max_allocation_retries = 3
         
         # Query available instances
         available_instances = pool_db.query_by_index(
             "StatusIndex", "status", InstanceStatus.AVAILABLE
         )
         
-        if available_instances:
-            # Use first available instance
-            pool_record = available_instances[0]
-            instance_id = pool_record["instance_id"]
+        # Try to allocate an instance with retry logic for race conditions
+        for retry_attempt in range(max_allocation_retries):
+            if not available_instances:
+                logger.info(f"No available instances found (attempt {retry_attempt + 1}/{max_allocation_retries})")
+                break
+                
+            # Try each available instance until we successfully claim one
+            for pool_record in available_instances:
+                candidate_id = pool_record["instance_id"]
+                
+                try:
+                    # Verify instance is actually running
+                    instance_info = ec2_client.get_instance_status(candidate_id)
+                    if not instance_info or instance_info.get("State", {}).get("Name") != "running":
+                        # Instance not running, mark as unhealthy
+                        pool_db.update_item(
+                            {"instance_id": candidate_id},
+                            {"status": InstanceStatus.UNHEALTHY}
+                        )
+                        continue
+                    
+                    # Atomically claim the instance using conditional update
+                    # This prevents race conditions by ensuring status is still AVAILABLE
+                    update_success = pool_db.conditional_update(
+                        {"instance_id": candidate_id},
+                        {
+                            "status": InstanceStatus.ASSIGNED,
+                            "session_id": session_id,
+                            "student_id": student_id,
+                            "assigned_at": now,
+                        },
+                        condition_expression="#status = :available",
+                        expression_attribute_names={"#status": "status"},
+                        expression_attribute_values={":available": InstanceStatus.AVAILABLE}
+                    )
+                    
+                    if update_success:
+                        # Successfully claimed the instance
+                        instance_id = candidate_id
+                        instance_ip = instance_info.get("PrivateIpAddress")
+                        
+                        # Tag the instance
+                        ec2_client.tag_instance(instance_id, {
+                            "SessionId": session_id,
+                            "StudentId": student_id,
+                            "AssignedAt": get_iso_timestamp(),
+                        })
+                        
+                        logger.info(f"Successfully allocated instance {instance_id} to session {session_id}")
+                        break
+                    else:
+                        # Another Lambda grabbed this instance, try next one
+                        logger.info(f"Instance {candidate_id} was claimed by another session, trying next")
+                        continue
+                        
+                except Exception as e:
+                    logger.warning(f"Error attempting to allocate instance {candidate_id}: {str(e)}")
+                    continue
             
-            # Verify instance is actually running
-            instance_info = ec2_client.get_instance_status(instance_id)
-            if instance_info and instance_info.get("State", {}).get("Name") == "running":
-                instance_ip = instance_info.get("PrivateIpAddress")
-                
-                # Mark instance as assigned
-                pool_db.update_item(
-                    {"instance_id": instance_id},
-                    {
-                        "status": InstanceStatus.ASSIGNED,
-                        "session_id": session_id,
-                        "student_id": student_id,
-                        "assigned_at": now,
-                    }
+            # If we successfully allocated an instance, break out of retry loop
+            if instance_id:
+                break
+            
+            # If not successful and we have retries left, re-query for available instances
+            if retry_attempt < max_allocation_retries - 1:
+                import time
+                time.sleep(0.3 * (retry_attempt + 1))  # Exponential backoff
+                available_instances = pool_db.query_by_index(
+                    "StatusIndex", "status", InstanceStatus.AVAILABLE
                 )
-                
-                # Tag the instance
-                ec2_client.tag_instance(instance_id, {
-                    "SessionId": session_id,
-                    "StudentId": student_id,
-                    "AssignedAt": get_iso_timestamp(),
-                })
-            else:
-                # Instance not running, mark as unhealthy
-                pool_db.update_item(
-                    {"instance_id": instance_id},
-                    {"status": InstanceStatus.UNHEALTHY}
-                )
-                instance_id = None
         
         # If no available instance, check ASG for stopped instances or scale up
         if not instance_id:
+            logger.info(f"No immediately available instances for session {session_id}, checking ASG for warm pool or scaling")
             asg_instances = asg_client.get_asg_instances(ASG_NAME)
+            logger.info(f"Found {len(asg_instances)} instances in ASG")
             
-            # Look for stopped instances we can start
+            # Look for stopped instances we can start (warm pool)
             for asg_instance in asg_instances:
                 inst_id = asg_instance.get("InstanceId")
                 lifecycle_state = asg_instance.get("LifecycleState")
                 
-                if lifecycle_state == "InService":
+                if lifecycle_state == "InService" or lifecycle_state == "Warmed:Stopped":
                     instance_info = ec2_client.get_instance_status(inst_id)
                     if instance_info:
                         state = instance_info.get("State", {}).get("Name")
@@ -400,7 +440,8 @@ def handler(event, context):
                         pool_record = pool_db.get_item({"instance_id": inst_id})
                         
                         if state == "stopped" and (not pool_record or pool_record.get("status") != InstanceStatus.ASSIGNED):
-                            # Start this instance
+                            # Start this instance (warm pool)
+                            logger.info(f"Starting warm pool instance {inst_id} for session {session_id}")
                             if ec2_client.start_instance(inst_id):
                                 instance_id = inst_id
                                 
@@ -413,15 +454,17 @@ def handler(event, context):
                                     "assigned_at": now,
                                 })
                                 
-                                # Update session to provisioning
+                                # Update session to provisioning with note
                                 sessions_db.update_item(
                                     {"session_id": session_id},
                                     {
                                         "status": SessionStatus.PROVISIONING,
                                         "instance_id": inst_id,
                                         "updated_at": now,
+                                        "provisioning_note": "Starting warm pool instance (30-60 seconds + status checks)",
                                     }
                                 )
+                                logger.info(f"Session {session_id} assigned to starting warm pool instance {inst_id}")
                                 break
                         
                         elif state == "running" and (not pool_record or pool_record.get("status") == InstanceStatus.AVAILABLE):

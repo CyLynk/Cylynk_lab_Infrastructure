@@ -90,6 +90,40 @@ define(["jquery", "core/str"], function ($, Str) {
       this.currentUsageData = null; // Store latest usage data
       this.sessionExpiresAt = null; // Track when session expires
       this.timerInterval = null; // Timer update interval
+      this.eduInterval = null; // Educational content rotation interval
+      this.currentEduIndex = 0; // Current educational tip index
+      this.currentAttackIndex = 0; // Current attack type index
+
+      // Educational content data
+      this.eduContent = [
+        "The average cost of a data breach in 2024 is $4.45 million. Proper security testing can prevent most breaches.",
+        "90% of cyberattacks start with a phishing email. Always verify sender addresses and suspicious links.",
+        "SQL Injection is still the #1 web application vulnerability. Always use parameterized queries.",
+        "Cross-Site Scripting (XSS) affects 75% of web applications. Sanitize all user input!",
+        "Weak passwords are responsible for 81% of data breaches. Use strong, unique passwords for every account.",
+        "Regular security updates close 95% of known vulnerabilities. Keep your systems patched!",
+        "Two-Factor Authentication (2FA) blocks 99.9% of automated attacks. Enable it everywhere possible.",
+        "The average time to detect a breach is 207 days. Continuous monitoring is essential.",
+        "Over 30,000 websites are hacked daily. Regular security audits are your best defense.",
+        "Port scanning is the first step in 80% of attacks. Understanding reconnaissance helps you defend better.",
+        "Nmap (Network Mapper) is used to discover hosts and services on a network. It's essential for penetration testing.",
+        "Metasploit Framework contains over 2,000 exploits. Ethical hackers use it to test system security.",
+        "Burp Suite intercepts HTTP traffic to find web application vulnerabilities before attackers do.",
+        "The OWASP Top 10 lists the most critical web application security risks. Learn them to secure your apps.",
+        "DNS tunneling can exfiltrate data slowly. Monitor unusual DNS query patterns in your network.",
+        "Privilege escalation is how attackers gain admin access. Always follow the principle of least privilege.",
+      ];
+
+      this.attackTypes = [
+        { name: "SQL Injection", icon: "💉", color: "#ff5722" },
+        { name: "XSS Attack", icon: "⚡", color: "#ff9800" },
+        { name: "Phishing", icon: "🎣", color: "#f44336" },
+        { name: "Port Scan", icon: "🔍", color: "#00bcd4" },
+        { name: "Brute Force", icon: "🔨", color: "#9c27b0" },
+        { name: "Man-in-Middle", icon: "👁️", color: "#673ab7" },
+        { name: "DoS Attack", icon: "💥", color: "#e91e63" },
+        { name: "Buffer Overflow", icon: "📦", color: "#ff5722" },
+      ];
 
       this.init();
     }
@@ -338,6 +372,7 @@ define(["jquery", "core/str"], function ($, Str) {
                             </div>
                             <div class="attackbox-progress-text">
                                 <span id="attackbox-progress-percent">0%</span>
+                                <span id="attackbox-time-estimate" class="attackbox-time-estimate"></span>
                             </div>
                         </div>
 
@@ -354,6 +389,34 @@ define(["jquery", "core/str"], function ($, Str) {
                                         <span class="attackbox-cursor">▋</span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Educational Content -->
+                        <div class="attackbox-edu-container">
+                            <div class="attackbox-edu-header">
+                                <svg class="attackbox-edu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 16v-4M12 8h.01"/>
+                                </svg>
+                                <span class="attackbox-edu-title">Did you know?</span>
+                            </div>
+                            <div class="attackbox-edu-content">
+                                <div id="attackbox-edu-text" class="attackbox-edu-text"></div>
+                            </div>
+                            <div class="attackbox-edu-visual">
+                                <div id="attackbox-attack-viz" class="attackbox-attack-viz">
+                                    <div class="attackbox-attack-node attackbox-attacker">
+                                        <span class="attackbox-node-icon">👤</span>
+                                        <span class="attackbox-node-label">Attacker</span>
+                                    </div>
+                                    <div class="attackbox-attack-path" id="attackbox-attack-path"></div>
+                                    <div class="attackbox-attack-node attackbox-target">
+                                        <span class="attackbox-node-icon">🎯</span>
+                                        <span class="attackbox-node-label">Target</span>
+                                    </div>
+                                </div>
+                                <div id="attackbox-attack-label" class="attackbox-attack-label"></div>
                             </div>
                         </div>
 
@@ -406,6 +469,7 @@ define(["jquery", "core/str"], function ($, Str) {
       this.$overlay = $("#attackbox-overlay");
       this.$progressFill = $("#attackbox-progress-fill");
       this.$progressPercent = $("#attackbox-progress-percent");
+      this.$timeEstimate = $("#attackbox-time-estimate");
       this.$statusMessage = $("#attackbox-status-message");
       this.$successContainer = $("#attackbox-success");
       this.$errorContainer = $("#attackbox-error");
@@ -478,7 +542,31 @@ define(["jquery", "core/str"], function ($, Str) {
       }
 
       this.isLaunching = true;
+
+      // Initialize progress bar before showing overlay to prevent visual glitch
+      const $progressFill = $("#attackbox-progress-fill");
+      const $progressPercent = $("#attackbox-progress-percent");
+      const $timeEstimate = $("#attackbox-time-estimate");
+      const $statusMessage = $("#attackbox-status-message");
+
+      if ($progressFill.length) {
+        $progressFill.css("width", "0%");
+      }
+      if ($progressPercent.length) {
+        $progressPercent.text("0%");
+      }
+      if ($timeEstimate.length) {
+        $timeEstimate.hide().text("");
+      }
+      if ($statusMessage.length) {
+        $statusMessage.html('<span class="attackbox-cursor">▋</span>');
+      }
+
       this.showOverlay();
+
+      // Small delay to ensure DOM is ready and CSS transitions work properly
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       this.updateProgress(0, this.strings.progress5);
 
       try {
@@ -645,11 +733,64 @@ define(["jquery", "core/str"], function ($, Str) {
             return;
           }
 
-          // Update progress based on API response
-          const progress =
-            session.progress || self.estimateProgress(session.status, attempts);
-          const message = self.getProgressMessage(progress);
-          self.updateProgress(progress, message);
+          // Update progress based on API response with more detailed status info
+          let progress;
+          let message;
+          let timeEstimate;
+
+          // Use API-provided stage info if available (includes health check details)
+          if (session.stage_message && session.progress) {
+            progress = session.progress;
+            message = session.stage_message;
+            timeEstimate = self.getTimeEstimate(session, progress);
+
+            // Log detailed info when waiting for health checks
+            if (session.stage === "waiting_health") {
+              console.log("Health check progress:", {
+                progress: progress,
+                message: message,
+                health_checks: session.health_checks,
+                timeEstimate: timeEstimate,
+              });
+            }
+          } else if (session.provisioning_stage === "waiting_health_checks") {
+            // Fallback: Instance is running but waiting for health checks (2/2)
+            const healthInfo = session.health_checks || {};
+            const systemStatus = healthInfo.system_status || "unknown";
+            const instanceStatus = healthInfo.instance_status || "unknown";
+
+            progress = 85;
+            message = `Instance running, verifying readiness... (System: ${systemStatus}, Instance: ${instanceStatus})`;
+            timeEstimate = self.getTimeEstimate(session, progress);
+
+            // Log for debugging
+            console.log("Waiting for health checks:", healthInfo);
+          } else {
+            // Use standard progress estimation
+            progress =
+              session.progress ||
+              self.estimateProgress(session.status, attempts);
+            message = self.getProgressMessage(progress);
+            timeEstimate = self.getTimeEstimate(session, progress);
+
+            // Add instance state info if available
+            if (session.instance_state) {
+              if (session.instance_state === "pending") {
+                message = "Starting instance from warm pool...";
+                progress = Math.min(progress, 60);
+                timeEstimate = self.getTimeEstimate(session, progress);
+              } else if (
+                session.instance_state === "running" &&
+                session.status === "provisioning"
+              ) {
+                message = "Instance running, initializing services...";
+                progress = Math.max(progress, 75);
+                timeEstimate = self.getTimeEstimate(session, progress);
+              }
+            }
+          }
+
+          self.updateProgress(progress, message, timeEstimate);
 
           if (session.status === "ready" || session.status === "active") {
             self.stopPolling();
@@ -827,13 +968,97 @@ define(["jquery", "core/str"], function ($, Str) {
     /**
      * Update progress display
      */
-    updateProgress(percent, message) {
+    updateProgress(percent, message, timeEstimate) {
       this.$progressFill.css("width", percent + "%");
       this.$progressPercent.text(percent + "%");
 
       if (message) {
         this.typeMessage(message);
       }
+
+      // Update time estimate if provided
+      if (timeEstimate) {
+        this.updateTimeEstimate(timeEstimate);
+      }
+    }
+
+    /**
+     * Update time estimate display
+     */
+    updateTimeEstimate(estimate) {
+      const $timeEstimate = $("#attackbox-time-estimate");
+      if (estimate) {
+        $timeEstimate.text(estimate).fadeIn(200);
+      } else {
+        $timeEstimate.fadeOut(200);
+      }
+    }
+
+    /**
+     * Calculate time estimate based on session stage and progress
+     */
+    getTimeEstimate(session, progress) {
+      if (!session) return null;
+
+      const status = session.status;
+      const stage = session.stage || session.provisioning_stage;
+
+      // Ready or active - no estimate needed
+      if (status === "ready" || status === "active") {
+        return null;
+      }
+
+      // Pending stage - quick
+      if (status === "pending") {
+        return "⏱ ~5-15 seconds";
+      }
+
+      // Provisioning stage - varies by sub-stage
+      if (status === "provisioning") {
+        // Check for specific provisioning stages
+        if (
+          stage === "instance_starting" ||
+          session.stage_message?.includes("Starting")
+        ) {
+          // Warm pool instance starting
+          if (progress < 40) {
+            return "⏱ ~30-60 seconds";
+          } else {
+            return "⏱ ~20-40 seconds";
+          }
+        } else if (
+          stage === "waiting_health" ||
+          stage === "waiting_health_checks"
+        ) {
+          // Health checks phase
+          const healthChecks = session.health_checks || {};
+          const systemStatus = healthChecks.system_status;
+          const instanceStatus = healthChecks.instance_status;
+
+          if (systemStatus === "passed" && instanceStatus === "passed") {
+            return "⏱ ~5-10 seconds";
+          } else if (
+            systemStatus === "initializing" ||
+            instanceStatus === "initializing"
+          ) {
+            return "⏱ ~60-120 seconds";
+          } else {
+            return "⏱ ~30-90 seconds";
+          }
+        } else if (stage === "allocating" || progress < 15) {
+          // Just allocated, starting provisioning
+          return "⏱ ~1-3 minutes";
+        } else if (progress >= 85) {
+          // Almost done
+          return "⏱ ~10-20 seconds";
+        } else {
+          // General provisioning
+          return "⏱ ~1-2 minutes";
+        }
+      }
+
+      // Default fallback
+      return "⏱ ~1-2 minutes";
     }
 
     /**
@@ -868,6 +1093,7 @@ define(["jquery", "core/str"], function ($, Str) {
       this.$successContainer.hide();
       this.$errorContainer.hide();
       $("body").addClass("attackbox-overlay-open");
+      this.startEducationalContent();
     }
 
     /**
@@ -877,6 +1103,7 @@ define(["jquery", "core/str"], function ($, Str) {
       this.$overlay.fadeOut(300);
       $("body").removeClass("attackbox-overlay-open");
       this.isLaunching = false;
+      this.stopEducationalContent();
     }
 
     /**
@@ -1105,6 +1332,72 @@ define(["jquery", "core/str"], function ($, Str) {
     }
 
     /**
+     * Start educational content rotation
+     */
+    startEducationalContent() {
+      // Show first tip immediately
+      this.rotateEducationalContent();
+
+      // Rotate every 5 seconds
+      this.eduInterval = setInterval(() => {
+        this.rotateEducationalContent();
+      }, 5000);
+    }
+
+    /**
+     * Stop educational content rotation
+     */
+    stopEducationalContent() {
+      if (this.eduInterval) {
+        clearInterval(this.eduInterval);
+        this.eduInterval = null;
+      }
+    }
+
+    /**
+     * Rotate to next educational content
+     */
+    rotateEducationalContent() {
+      const $eduText = $("#attackbox-edu-text");
+      const $attackLabel = $("#attackbox-attack-label");
+      const $attackPath = $("#attackbox-attack-path");
+
+      if (!$eduText.length) return;
+
+      // Fade out
+      $eduText.css("opacity", "0");
+      $attackLabel.css("opacity", "0");
+
+      setTimeout(() => {
+        // Update text content
+        const tip = this.eduContent[this.currentEduIndex];
+        $eduText.text(tip);
+
+        // Update attack visualization
+        const attack = this.attackTypes[this.currentAttackIndex];
+        $attackLabel.html(`<strong>${attack.icon} ${attack.name}</strong>`);
+        $attackPath.css(
+          "background",
+          `linear-gradient(90deg, ${attack.color}, transparent)`
+        );
+        $attackPath.attr(
+          "data-attack",
+          attack.name.toLowerCase().replace(/\\s+/g, "-")
+        );
+
+        // Fade in
+        $eduText.css("opacity", "1");
+        $attackLabel.css("opacity", "1");
+
+        // Increment indices
+        this.currentEduIndex =
+          (this.currentEduIndex + 1) % this.eduContent.length;
+        this.currentAttackIndex =
+          (this.currentAttackIndex + 1) % this.attackTypes.length;
+      }, 300);
+    }
+
+    /**
      * Update timer display
      */
     updateTimerDisplay() {
@@ -1191,14 +1484,20 @@ define(["jquery", "core/str"], function ($, Str) {
         const tokenData = await this.getToken();
 
         // Call terminate endpoint
+        // stop_instance=false returns instance to available pool for reuse
         const response = await fetch(
           tokenData.api_url + "/sessions/" + this.sessionId,
           {
             method: "DELETE",
             headers: {
               "X-Moodle-Token": tokenData.token,
+              "Content-Type": "application/json",
               Accept: "application/json",
             },
+            body: JSON.stringify({
+              reason: "user_requested",
+              stop_instance: false, // Keep instance running, return to pool
+            }),
           }
         );
 

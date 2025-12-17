@@ -461,12 +461,19 @@ resource "aws_lambda_function" "get_session_status" {
 
   environment {
     variables = {
-      SESSIONS_TABLE      = aws_dynamodb_table.sessions.name
-      INSTANCE_POOL_TABLE = aws_dynamodb_table.instance_pool.name
-      USAGE_TABLE         = aws_dynamodb_table.usage.name
-      ENVIRONMENT         = var.environment
-      PROJECT_NAME        = var.project_name
-      AWS_REGION_NAME     = var.aws_region
+      SESSIONS_TABLE       = aws_dynamodb_table.sessions.name
+      INSTANCE_POOL_TABLE  = aws_dynamodb_table.instance_pool.name
+      USAGE_TABLE          = aws_dynamodb_table.usage.name
+      GUACAMOLE_PRIVATE_IP = var.guacamole_private_ip
+      GUACAMOLE_PUBLIC_IP  = var.guacamole_public_ip
+      GUACAMOLE_API_URL    = var.guacamole_api_url
+      GUACAMOLE_ADMIN_USER = var.guacamole_admin_username
+      GUACAMOLE_ADMIN_PASS = var.guacamole_admin_password
+      RDP_USERNAME         = var.rdp_username
+      RDP_PASSWORD         = var.rdp_password
+      ENVIRONMENT          = var.environment
+      PROJECT_NAME         = var.project_name
+      AWS_REGION_NAME      = var.aws_region
     }
   }
 
