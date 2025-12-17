@@ -24,9 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2024121400;        // The current plugin version (Date: YYYYMMDDXX).
+$plugin->version = 2024121601;        // The current plugin version (Date: YYYYMMDDXX).
 $plugin->requires = 2024042200;        // Requires Moodle 4.4.
 $plugin->component = 'local_attackbox'; // Full name of the plugin.
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.3.0';            // New feature: Admin dashboard for session management.
+$plugin->release = '1.4.1';            // Added: Real-time estimated time frames in loader for better UX.
 

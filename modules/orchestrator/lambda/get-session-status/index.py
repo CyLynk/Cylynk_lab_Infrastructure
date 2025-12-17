@@ -14,6 +14,7 @@ sys.path.insert(0, "/opt/python")
 from utils import (
     DynamoDBClient,
     EC2Client,
+    GuacamoleClient,
     InstanceStatus,
     SessionStatus,
     error_response,
@@ -29,6 +30,25 @@ logger.setLevel(logging.INFO)
 SESSIONS_TABLE = os.environ.get("SESSIONS_TABLE")
 INSTANCE_POOL_TABLE = os.environ.get("INSTANCE_POOL_TABLE")
 GUACAMOLE_PRIVATE_IP = os.environ.get("GUACAMOLE_PRIVATE_IP", "")
+GUACAMOLE_PUBLIC_IP = os.environ.get("GUACAMOLE_PUBLIC_IP", "")
+GUACAMOLE_API_URL = os.environ.get("GUACAMOLE_API_URL", "")
+GUACAMOLE_ADMIN_USER = os.environ.get("GUACAMOLE_ADMIN_USER", "guacadmin")
+GUACAMOLE_ADMIN_PASS = os.environ.get("GUACAMOLE_ADMIN_PASS", "guacadmin")
+RDP_USERNAME = os.environ.get("RDP_USERNAME", "kali")
+RDP_PASSWORD = os.environ.get("RDP_PASSWORD", "kali")
+
+
+def get_guacamole_public_url() -> str:
+    """Get the public-facing Guacamole URL for students."""
+    if GUACAMOLE_API_URL:
+        return GUACAMOLE_API_URL
+    if GUACAMOLE_PUBLIC_IP:
+        return f"https://{GUACAMOLE_PUBLIC_IP}/guacamole"
+    if GUACAMOLE_PRIVATE_IP:
+        # Fallback to private IP (won't work for external access)
+        logger.warning("Using private IP for Guacamole URL - external access won't work!")
+        return f"https://{GUACAMOLE_PRIVATE_IP}/guacamole"
+    return ""
 
 
 def handler(event, context):
@@ -86,15 +106,21 @@ def get_session_by_id(session_id: str, sessions_db, pool_db, ec2_client):
     
     # Persist status change if it was updated
     if session.get("status") != original_status:
-        sessions_db.update_item(
-            {"session_id": session_id},
-            {
-                "status": session["status"],
-                "updated_at": get_current_timestamp(),
-                "instance_state": session.get("instance_state"),
-                "instance_ip": session.get("instance_ip"),
-            }
-        )
+        update_data = {
+            "status": session["status"],
+            "updated_at": get_current_timestamp(),
+            "instance_state": session.get("instance_state"),
+            "instance_ip": session.get("instance_ip"),
+        }
+        
+        # Also persist connection info when session becomes ready
+        if session.get("status") == SessionStatus.READY:
+            if session.get("connection_info"):
+                update_data["connection_info"] = session["connection_info"]
+            if session.get("direct_url"):
+                update_data["direct_url"] = session["direct_url"]
+        
+        sessions_db.update_item({"session_id": session_id}, update_data)
         logger.info(f"Session {session_id} status updated: {original_status} -> {session['status']}")
     
     return success_response(
@@ -118,15 +144,21 @@ def get_sessions_by_student(student_id: str, sessions_db, pool_db, ec2_client):
         
         # Persist status change if it was updated
         if session.get("status") != original_status:
-            sessions_db.update_item(
-                {"session_id": session["session_id"]},
-                {
-                    "status": session["status"],
-                    "updated_at": get_current_timestamp(),
-                    "instance_state": session.get("instance_state"),
-                    "instance_ip": session.get("instance_ip"),
-                }
-            )
+            update_data = {
+                "status": session["status"],
+                "updated_at": get_current_timestamp(),
+                "instance_state": session.get("instance_state"),
+                "instance_ip": session.get("instance_ip"),
+            }
+            
+            # Also persist connection info when session becomes ready
+            if session.get("status") == SessionStatus.READY:
+                if session.get("connection_info"):
+                    update_data["connection_info"] = session["connection_info"]
+                if session.get("direct_url"):
+                    update_data["direct_url"] = session["direct_url"]
+            
+            sessions_db.update_item({"session_id": session["session_id"]}, update_data)
             logger.info(f"Session {session['session_id']} status updated: {original_status} -> {session['status']}")
         
         enriched_sessions.append(format_session_response(session))
@@ -165,17 +197,106 @@ def enrich_session_status(session: dict, pool_db, ec2_client) -> dict:
         session["termination_reason"] = "expired"
         return session
     
-    # If no instance assigned, check if session has been waiting too long
-    if not instance_id:
+    # If no instance assigned, try to allocate one from available pool
+    if not instance_id and session.get("status") == SessionStatus.PROVISIONING:
         created_at = session.get("created_at", 0)
         time_waiting = now - created_at
         
-        # If session has been in provisioning for more than 3 minutes without an instance, mark as error
-        if time_waiting > 180 and session.get("status") == SessionStatus.PROVISIONING:
-            logger.error(f"Session {session.get('session_id')} stuck in provisioning without instance for {time_waiting}s")
-            session["status"] = SessionStatus.ERROR
-            session["error"] = "Failed to allocate instance. Please try again or contact support."
+        # Try to find an available instance for this waiting session
+        # Query for available instances in the pool
+        try:
+            available_instances = pool_db.query_by_index(
+                "StatusIndex", "status", InstanceStatus.AVAILABLE
+            )
+            
+            if available_instances:
+                # Try to claim the first available instance
+                candidate = available_instances[0]
+                candidate_id = candidate["instance_id"]
+                
+                # Verify instance is actually running
+                instance_info = ec2_client.get_instance_status(candidate_id)
+                if instance_info and instance_info.get("State", {}).get("Name") == "running":
+                    # Atomically claim this instance for the session
+                    update_success = pool_db.conditional_update(
+                        {"instance_id": candidate_id},
+                        {
+                            "status": InstanceStatus.ASSIGNED,
+                            "session_id": session["session_id"],
+                            "student_id": session.get("student_id"),
+                            "assigned_at": now,
+                        },
+                        condition_expression="#status = :available",
+                        expression_attribute_names={"#status": "status"},
+                        expression_attribute_values={":available": InstanceStatus.AVAILABLE}
+                    )
+                    
+                    if update_success:
+                        # Successfully claimed the instance - update session
+                        instance_id = candidate_id
+                        instance_ip = instance_info.get("PrivateIpAddress")
+                        
+                        session["instance_id"] = instance_id
+                        session["instance_ip"] = instance_ip
+                        session["updated_at"] = now
+                        
+                        logger.info(f"Allocated instance {instance_id} to waiting session {session['session_id']} after {time_waiting}s")
+                        
+                        # Don't return yet - let the code below continue to check health
+                    else:
+                        logger.info(f"Failed to claim instance {candidate_id}, it was taken by another session")
+        except Exception as e:
+            logger.warning(f"Error trying to allocate instance for waiting session: {str(e)}")
         
+        # If still no instance after trying to allocate, check timeout
+        if not session.get("instance_id"):
+            # If session has been in provisioning for more than 5 minutes without an instance, mark as error
+            # Warm pool instances take 30-60s to start + 60-120s for status checks = up to 3 minutes
+            # ASG scale-up can take 3-5 minutes for new instances
+            if time_waiting > 300:
+                logger.error(f"Session {session.get('session_id')} stuck in provisioning without instance for {time_waiting}s")
+                session["status"] = SessionStatus.ERROR
+                session["error"] = "Instance allocation timed out. The system may be at capacity. Please try again in a moment."
+            elif time_waiting > 240:
+                # Warn at 4 minutes but don't fail yet
+                logger.warning(f"Session {session.get('session_id')} still waiting for instance after {time_waiting}s")
+            
+            return session
+    
+    # If no instance_id but session has instance_ip (edge case from previous allocation)
+    # Try to create Guacamole connection with the existing IP
+    if not instance_id:
+        instance_ip = session.get("instance_ip")
+        if instance_ip and session.get("status") == SessionStatus.READY:
+            # Session is ready with an IP but no instance_id - try to create Guacamole connection
+            existing_conn = session.get("connection_info") or {}
+            guac_connection_exists = existing_conn.get("guacamole_connection_id") is not None
+            
+            if not guac_connection_exists and not session.get("direct_url"):
+                logger.info(f"Session {session['session_id']} has IP but no instance_id - attempting Guacamole connection")
+                try:
+                    guac_result = create_guacamole_connection(
+                        session_id=session["session_id"],
+                        instance_ip=instance_ip,
+                        student_id=session.get("student_id", ""),
+                    )
+                    
+                    if guac_result and guac_result.get("guacamole_connection_url"):
+                        session["connection_info"] = {
+                            "type": "guacamole",
+                            "guacamole_url": guac_result.get("guacamole_base_url"),
+                            "guacamole_connection_id": guac_result.get("guacamole_connection_id"),
+                            "instance_ip": instance_ip,
+                            "rdp_port": 3389,
+                            "vnc_port": 5901,
+                            "ssh_port": 22,
+                        }
+                        session["direct_url"] = guac_result.get("guacamole_connection_url")
+                        logger.info(f"Successfully created Guacamole connection for session {session['session_id']} (no instance_id)")
+                    else:
+                        logger.warning(f"Guacamole connection creation returned empty result for session {session['session_id']} (no instance_id)")
+                except Exception as e:
+                    logger.error(f"Exception creating Guacamole connection for session {session['session_id']} (no instance_id): {str(e)}", exc_info=True)
         return session
     
     # Get live instance status
@@ -208,9 +329,9 @@ def enrich_session_status(session: dict, pool_db, ec2_client) -> dict:
         created_at = session.get("created_at", 0)
         time_running = now - created_at  # seconds
         
-        # Check if health checks passed OR timeout fallback (5 minutes)
+        # Check if health checks passed OR timeout fallback (2 minutes)
         health_passed = health_checks.get("all_passed", False)
-        timeout_fallback = time_running > 300  # 5 minutes
+        timeout_fallback = time_running > 120  # 2 minutes - reduced from 5 for faster UX
         
         if health_passed or timeout_fallback:
             if session.get("status") == SessionStatus.PROVISIONING:
@@ -221,16 +342,58 @@ def enrich_session_status(session: dict, pool_db, ec2_client) -> dict:
                         f"Health checks: {health_checks}"
                     )
             
-            # Build/update connection info only when fully ready
-            if instance_ip and "connection_info" not in session:
-                session["connection_info"] = {
-                    "type": "guacamole",
-                    "guacamole_url": f"https://{GUACAMOLE_PRIVATE_IP}/guacamole" if GUACAMOLE_PRIVATE_IP else None,
-                    "instance_ip": instance_ip,
-                    "rdp_port": 3389,
-                    "vnc_port": 5901,
-                    "ssh_port": 22,
-                }
+            # Build/update connection info only when fully ready and Guacamole connection not yet created
+            # Check if guacamole_connection_id exists (not just connection_info, which may have basic fallback info)
+            existing_conn = session.get("connection_info") or {}
+            guac_connection_exists = existing_conn.get("guacamole_connection_id") is not None
+            
+            if instance_ip and not guac_connection_exists and not session.get("direct_url"):
+                # Create Guacamole connection with direct URL
+                try:
+                    logger.info(f"Attempting to create Guacamole connection for session {session['session_id']}")
+                    guac_result = create_guacamole_connection(
+                        session_id=session["session_id"],
+                        instance_ip=instance_ip,
+                        student_id=session.get("student_id", ""),
+                    )
+                    
+                    if guac_result and guac_result.get("guacamole_connection_url"):
+                        session["connection_info"] = {
+                            "type": "guacamole",
+                            "guacamole_url": guac_result.get("guacamole_base_url"),
+                            "guacamole_connection_id": guac_result.get("guacamole_connection_id"),
+                            "instance_ip": instance_ip,
+                            "rdp_port": 3389,
+                            "vnc_port": 5901,
+                            "ssh_port": 22,
+                        }
+                        session["direct_url"] = guac_result.get("guacamole_connection_url")
+                        logger.info(f"Successfully created Guacamole connection for session {session['session_id']}")
+                    else:
+                        # Log warning but don't fail the entire request
+                        logger.warning(f"Guacamole connection creation returned empty result for session {session['session_id']}")
+                        # Don't overwrite connection_info with fallback - let it retry on next poll
+                        if not session.get("connection_info"):
+                            session["connection_info"] = {
+                                "type": "guacamole",
+                                "instance_ip": instance_ip,
+                                "rdp_port": 3389,
+                                "vnc_port": 5901,
+                                "ssh_port": 22,
+                            }
+                        
+                except Exception as e:
+                    # Log error but don't crash - return session with basic info
+                    logger.error(f"Exception creating Guacamole connection for session {session['session_id']}: {str(e)}", exc_info=True)
+                    # Don't overwrite connection_info with fallback - let it retry on next poll
+                    if not session.get("connection_info"):
+                        session["connection_info"] = {
+                            "type": "guacamole",
+                            "instance_ip": instance_ip,
+                            "rdp_port": 3389,
+                            "vnc_port": 5901,
+                            "ssh_port": 22,
+                        }
         else:
             # Instance running but health checks not passed yet
             # Keep status as PROVISIONING to show "waiting for health checks"
@@ -251,6 +414,112 @@ def enrich_session_status(session: dict, pool_db, ec2_client) -> dict:
         session["instance_state"] = instance_state
     
     return session
+
+
+def get_guacamole_api_url() -> str:
+    """
+    Get the best URL for Guacamole API calls.
+    Prefers GUACAMOLE_API_URL (public), then public IP, then private IP.
+    """
+    if GUACAMOLE_API_URL:
+        return GUACAMOLE_API_URL
+    if GUACAMOLE_PUBLIC_IP:
+        return f"https://{GUACAMOLE_PUBLIC_IP}/guacamole"
+    if GUACAMOLE_PRIVATE_IP:
+        return f"http://{GUACAMOLE_PRIVATE_IP}/guacamole"
+    return ""
+
+
+def create_guacamole_connection(session_id: str, instance_ip: str, student_id: str) -> dict:
+    """
+    Create a Guacamole RDP connection and return connection details with direct URL.
+    
+    Args:
+        session_id: The session ID
+        instance_ip: Private IP address of the AttackBox instance
+        student_id: Student ID
+    
+    Returns:
+        Dictionary with guacamole_connection_id, guacamole_connection_url, guacamole_base_url
+        Returns empty dict on error (doesn't raise exceptions)
+    """
+    try:
+        # Get the best URL for API calls (prefers public URL for Lambda outside VPC)
+        api_url = get_guacamole_api_url()
+        if not api_url:
+            logger.error("No Guacamole URL configured (GUACAMOLE_API_URL, GUACAMOLE_PUBLIC_IP, or GUACAMOLE_PRIVATE_IP)")
+            return {}
+            
+        logger.info(f"Using Guacamole API URL: {api_url}")
+        
+        public_url = get_guacamole_public_url()
+        if not public_url:
+            # Fallback to API URL if no separate public URL
+            public_url = api_url
+        
+        logger.info(f"Initializing Guacamole client with URL: {api_url}")
+        guac = GuacamoleClient(
+            base_url=api_url,
+            username=GUACAMOLE_ADMIN_USER,
+            password=GUACAMOLE_ADMIN_PASS,
+        )
+        
+        # Create RDP connection
+        connection_name = f"attackbox-{session_id[-8:]}"
+        logger.info(f"Creating RDP connection '{connection_name}' to {instance_ip}")
+        
+        connection_id = guac.create_rdp_connection(
+            name=connection_name,
+            hostname=instance_ip,
+            username=RDP_USERNAME,
+            password=RDP_PASSWORD,
+        )
+        
+        if not connection_id:
+            logger.error(f"Failed to create Guacamole connection for session {session_id}")
+            return {}
+        
+        logger.info(f"Created Guacamole connection {connection_id} for session {session_id}")
+        
+        # Switch to public URL for generating student-facing links
+        guac.base_url = public_url
+        
+        # Create a temporary session user and get a direct-access URL
+        logger.info(f"Creating session user for direct access")
+        direct_url = guac.create_session_user_and_get_url(
+            session_id=session_id,
+            connection_id=connection_id,
+            student_id=student_id,
+        )
+        
+        # Generate username for cleanup later
+        session_username = f"session_{session_id[-8:]}"
+        
+        if direct_url:
+            logger.info(f"Created session user {session_username} with direct access URL")
+            return {
+                "guacamole_connection_id": connection_id,
+                "guacamole_connection_url": direct_url,
+                "guacamole_base_url": public_url,
+                "guacamole_session_user": session_username,
+            }
+        else:
+            # Fallback to regular URL (will require login)
+            logger.warning("Could not create session user, falling back to regular URL")
+            try:
+                connection_url = guac.get_connection_url(connection_id)
+                return {
+                    "guacamole_connection_id": connection_id,
+                    "guacamole_connection_url": connection_url,
+                    "guacamole_base_url": public_url,
+                }
+            except Exception as e:
+                logger.error(f"Error getting connection URL: {str(e)}")
+                return {}
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in create_guacamole_connection: {str(e)}", exc_info=True)
+        return {}
 
 
 def get_stage_info(session: dict) -> dict:
@@ -436,7 +705,8 @@ def format_session_response(session: dict) -> dict:
         "instance_ip": session.get("instance_ip"),
         "instance_state": session.get("instance_state"),
         "connection_info": session.get("connection_info"),
-        "direct_url": session.get("connection_info", {}).get("direct_url") 
+        "direct_url": session.get("direct_url")
+                      or session.get("connection_info", {}).get("direct_url") 
                       or session.get("connection_info", {}).get("guacamole_connection_url"),
         "created_at": session.get("created_at"),
         "updated_at": session.get("updated_at"),

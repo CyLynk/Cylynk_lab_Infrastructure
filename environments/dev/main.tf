@@ -150,13 +150,16 @@ module "attackbox" {
   min_pool_size = var.attackbox_min_pool_size
   max_pool_size = var.attackbox_max_pool_size
 
+  # Warm pool configuration for fast instance launches (30-60 seconds)
+  warm_pool_min_size                    = var.warm_pool_min_size
+  warm_pool_max_group_prepared_capacity = var.warm_pool_max_group_prepared_capacity
+
   # Use custom AMI
   use_custom_ami = true
   custom_ami_id  = var.attackbox_ami_id  # Set this from Packer output
 
-  # Features
-  enable_auto_scaling      = true  # Enable in dev for testing concurrent sessions
-  enable_scheduled_scaling = var.environment == "production"
+  # Features - Scheduled scaling disabled (users are global, different timezones)
+  enable_auto_scaling      = true  # Enable dynamic scaling based on demand
   enable_session_tracking  = true
   enable_notifications     = var.environment == "production"
 

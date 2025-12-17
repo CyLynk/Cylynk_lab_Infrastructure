@@ -208,6 +208,16 @@ variable "attackbox_max_pool_size" {
 
 }
 
+variable "warm_pool_min_size" {
+  description = "Minimum number of instances to keep in warm pool (stopped state)"
+  type        = number
+}
+
+variable "warm_pool_max_group_prepared_capacity" {
+  description = "Maximum combined capacity of running instances + warm pool instances"
+  type        = number
+}
+
 # Orchestrator Configuration
 variable "session_ttl_hours" {
   description = "Session TTL in hours before auto-cleanup"

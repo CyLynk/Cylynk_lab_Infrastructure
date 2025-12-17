@@ -158,12 +158,32 @@ resource "aws_autoscaling_group" "attackbox_pool" {
     "GroupInServiceInstances",
     "GroupMinSize",
     "GroupMaxSize",
-    "GroupTotalInstances"
+    "GroupTotalInstances",
+    "GroupAndWarmPoolDesiredCapacity",
+    "GroupAndWarmPoolTotalCapacity",
+    "WarmPoolDesiredCapacity",
+    "WarmPoolMinSize",
+    "WarmPoolPendingCapacity",
+    "WarmPoolTerminatingCapacity",
+    "WarmPoolTotalCapacity",
+    "WarmPoolWarmedCapacity"
   ]
 
   launch_template {
     id      = aws_launch_template.attackbox.id
     version = "$Latest"
+  }
+
+  # Warm Pool Configuration
+  # Pre-started instances in stopped state for fast launches (30-60 seconds)
+  warm_pool {
+    pool_state                  = "Stopped"  # Instances stopped to save cost
+    min_size                    = var.warm_pool_min_size
+    max_group_prepared_capacity = var.warm_pool_max_group_prepared_capacity
+    
+    instance_reuse_policy {
+      reuse_on_scale_in = true  # Recycle instances back to warm pool
+    }
   }
 
   instance_refresh {
@@ -271,27 +291,8 @@ resource "aws_cloudwatch_metric_alarm" "cpu_low" {
   tags = var.tags
 }
 
-# Scheduled Action - Scale down during off-hours (optional)
-resource "aws_autoscaling_schedule" "scale_down_offhours" {
-  count                  = var.enable_scheduled_scaling ? 1 : 0
-  scheduled_action_name  = "${var.project_name}-${var.environment}-scale-down-offhours"
-  min_size               = var.offhours_min_size
-  max_size               = var.max_pool_size
-  desired_capacity       = var.offhours_desired_size
-  recurrence             = "0 22 * * *" # 10 PM daily
-  autoscaling_group_name = aws_autoscaling_group.attackbox_pool.name
-}
-
-# Scheduled Action - Scale up during business hours (optional)
-resource "aws_autoscaling_schedule" "scale_up_business" {
-  count                  = var.enable_scheduled_scaling ? 1 : 0
-  scheduled_action_name  = "${var.project_name}-${var.environment}-scale-up-business"
-  min_size               = var.min_pool_size
-  max_size               = var.max_pool_size
-  desired_capacity       = var.pool_size
-  recurrence             = "0 8 * * MON-FRI" # 8 AM weekdays
-  autoscaling_group_name = aws_autoscaling_group.attackbox_pool.name
-}
+# Scheduled scaling removed - users are global with different timezones
+# Rely on dynamic scaling based on demand instead
 
 # SNS Topic for AttackBox notifications (optional)
 resource "aws_sns_topic" "attackbox_notifications" {
