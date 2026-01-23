@@ -214,8 +214,25 @@ jobs:
           # Remove any Windows line endings and ensure proper format
           sed -i 's/\r$//' ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # Debug: Check key file (first and last lines only for security)
+          echo "🔍 Debugging SSH key format..."
+          echo "Key file size: $(wc -c < ~/.ssh/id_rsa) bytes"
+          echo "First line: $(head -n 1 ~/.ssh/id_rsa)"
+          echo "Last line: $(tail -n 1 ~/.ssh/id_rsa)"
+          echo "Line count: $(wc -l < ~/.ssh/id_rsa)"
           # Validate the key format
-          ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null 2>&1 || (echo "❌ Invalid SSH key format - please check the secret" && exit 1)
+          if ! ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null 2>&1; then
+            echo "❌ Invalid SSH key format - please check the secret"
+            echo "The key should start with '-----BEGIN' and end with '-----END'"
+            echo "Checking for common issues..."
+            if ! grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/id_rsa; then
+              echo "❌ Missing BEGIN marker"
+            fi
+            if ! grep -q "END.*PRIVATE KEY" ~/.ssh/id_rsa; then
+              echo "❌ Missing END marker"
+            fi
+            exit 1
+          fi
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/id_rsa
 
