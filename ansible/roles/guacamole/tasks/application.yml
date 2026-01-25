@@ -236,29 +236,20 @@
       register: admin_user_details
       when: guac_auth_default is succeeded
 
+    - name: Debug admin user details
+      ansible.builtin.debug:
+        msg: "Admin user details: {{ admin_user_details.json | default({}) }}"
+      when: guac_auth_default is succeeded and admin_user_details is succeeded
+
     - name: Update admin password via API
       ansible.builtin.uri:
         url: "http://localhost:8080/guacamole/api/session/data/postgresql/users/guacadmin?token={{ guac_auth_default.json.authToken }}"
         method: PUT
         body_format: json
-        body:
-          username: "guacadmin"
-          password: "{{ guacamole_admin_password }}"
-          attributes:
-            disabled: ""
-            expired: ""
-            access-window-start: ""
-            access-window-end: ""
-            valid-from: ""
-            valid-until: ""
-            timezone: null
-            guac-full-name: ""
-            guac-email-address: ""
-            guac-organization: ""
-            guac-organizational-role: ""
+        body: "{{ admin_user_details.json | combine({'password': guacamole_admin_password}) }}"
         status_code: [204]
       register: password_update_result
-      when: guac_auth_default is succeeded
+      when: guac_auth_default is succeeded and admin_user_details is succeeded
       no_log: true
 
     - name: Verify new password works
