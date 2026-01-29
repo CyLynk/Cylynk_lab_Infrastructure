@@ -49,3 +49,10 @@ secret_script.sh
 *pkrvars.hcl
 
 *.md
+
+########################
+# Lambda build artifacts #
+########################
+# These are built in the CI/CD pipeline
+modules/orchestrator/lambda/packages/*.zip
+modules/orchestrator/lambda/layers/*.zip

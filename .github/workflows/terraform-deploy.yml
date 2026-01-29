@@ -56,6 +56,15 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: GitHubActions-TerraformDeploy-Dev
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Lambda Packages
+        working-directory: ${{ github.workspace }}
+        run: python scripts/build-lambdas.py
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -187,6 +196,15 @@ jobs:
           role-to-assume: ${{ secrets.PROD_AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION_PROD }}
           role-session-name: GitHubActions-TerraformDeploy-Prod
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Lambda Packages
+        working-directory: ${{ github.workspace }}
+        run: python scripts/build-lambdas.py
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
