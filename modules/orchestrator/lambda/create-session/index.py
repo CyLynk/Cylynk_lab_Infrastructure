@@ -269,6 +269,94 @@ def cleanup_stale_session(
     logger.info(f"[STALE_SESSION_CLEANUP] User {student_id} can now create a new session")
 
 
+def regenerate_guacamole_session_access(
+    session_id: str,
+    student_id: str,
+    connection_id: str,
+    existing_connection_info: dict,
+) -> dict:
+    """
+    Regenerate the Guacamole session user and URL for an existing session.
+    
+    This is used when:
+    - User logged out via Guacamole's logout button
+    - Their auth token became invalid
+    - But the session/connection still exists
+    
+    We delete the old session user and create a new one to get a fresh token.
+    
+    Args:
+        session_id: The existing session ID
+        student_id: The student ID
+        connection_id: The existing Guacamole connection ID
+        existing_connection_info: The existing connection_info dict
+        
+    Returns:
+        Updated connection_info dict with new URL, or empty dict on failure
+    """
+    logger.info(f"[REGENERATE_ACCESS] ========== REGENERATING SESSION ACCESS ==========")
+    logger.info(f"[REGENERATE_ACCESS] Session ID: {session_id}")
+    logger.info(f"[REGENERATE_ACCESS] Connection ID: {connection_id}")
+    
+    internal_url = get_guacamole_internal_url()
+    public_url = get_guacamole_public_url()
+    
+    if not internal_url:
+        logger.warning("[REGENERATE_ACCESS] No Guacamole URL configured")
+        return {}
+    
+    try:
+        guac = GuacamoleClient(
+            base_url=internal_url,
+            username=GUACAMOLE_ADMIN_USER,
+            password=GUACAMOLE_ADMIN_PASS,
+            timeout=5,
+        )
+        
+        # Delete the old session user if it exists
+        old_session_user = existing_connection_info.get("guacamole_session_user")
+        if old_session_user:
+            logger.info(f"[REGENERATE_ACCESS] Deleting old session user: {old_session_user}")
+            try:
+                guac.delete_user(old_session_user)
+            except Exception as e:
+                logger.warning(f"[REGENERATE_ACCESS] Failed to delete old user (continuing anyway): {e}")
+        
+        # Switch to public URL for generating student-facing links
+        guac.base_url = public_url
+        
+        # Create a new session user and get a fresh token
+        logger.info(f"[REGENERATE_ACCESS] Creating new session user and getting fresh token")
+        direct_url = guac.create_session_user_and_get_url(
+            session_id=session_id,
+            connection_id=connection_id,
+            student_id=student_id,
+        )
+        
+        session_username = f"session_{session_id[-8:]}"
+        
+        if direct_url:
+            logger.info(f"[REGENERATE_ACCESS] Successfully created new session user: {session_username}")
+            logger.info(f"[REGENERATE_ACCESS] New direct URL generated")
+            
+            # Build updated connection_info
+            updated_info = existing_connection_info.copy()
+            updated_info["guacamole_connection_url"] = direct_url
+            updated_info["guacamole_session_user"] = session_username
+            updated_info["direct_url"] = direct_url
+            updated_info["access_regenerated_at"] = get_current_timestamp()
+            
+            logger.info(f"[REGENERATE_ACCESS] ========== ACCESS REGENERATION COMPLETE ==========")
+            return updated_info
+        else:
+            logger.error(f"[REGENERATE_ACCESS] Failed to create session user or get direct URL")
+            return {}
+            
+    except Exception as e:
+        logger.error(f"[REGENERATE_ACCESS] Error regenerating session access: {e}")
+        return {}
+
+
 def create_guacamole_connection(
     session_id: str,
     student_id: str,
@@ -338,6 +426,8 @@ def create_guacamole_connection(
         
         if direct_url:
             logger.info(f"Created session user {session_username} with direct access URL")
+            logger.info(f"[GUACAMOLE_URL] Direct URL generated: {direct_url[:100]}..." if len(direct_url) > 100 else f"[GUACAMOLE_URL] Direct URL generated: {direct_url}")
+            logger.info(f"[GUACAMOLE_URL] URL contains token: {'?token=' in direct_url}")
             return {
                 "guacamole_connection_id": connection_id,
                 "guacamole_connection_url": direct_url,  # URL with embedded token
@@ -346,8 +436,9 @@ def create_guacamole_connection(
             }
         else:
             # Fallback to regular URL (will require login)
-            logger.warning("Could not create session user, falling back to regular URL")
+            logger.warning("[GUACAMOLE_URL] Could not create session user, falling back to regular URL (will require login!)")
             connection_url = guac.get_connection_url(connection_id)
+            logger.warning(f"[GUACAMOLE_URL] Fallback URL: {connection_url}")
             return {
                 "guacamole_connection_id": connection_id,
                 "guacamole_connection_url": connection_url,
@@ -510,9 +601,50 @@ def handler(event, context):
                     logger.info(f"[STALE_SESSION_CHECK] No Guacamole connection ID but session is {session.get('status')}")
             
             if is_actually_connected:
-                # User IS connected - return existing session as before
-                logger.info(f"[STALE_SESSION_CHECK] ===== USER IS ACTIVELY CONNECTED =====")
-                logger.info(f"[STALE_SESSION_CHECK] Returning existing session (user is using it)")
+                # User appears connected, but their Guacamole auth token might be invalid
+                # (e.g., they logged out via Guacamole UI but the tunnel is still active)
+                # Regenerate the session user and URL to ensure they can connect
+                logger.info(f"[STALE_SESSION_CHECK] ===== CONNECTION APPEARS ACTIVE =====")
+                logger.info(f"[STALE_SESSION_CHECK] Regenerating Guacamole session user to ensure valid access")
+                
+                # Try to regenerate the Guacamole session user and get a fresh URL
+                instance_ip = session.get("instance_ip")
+                if instance_ip and guac_connection_id:
+                    fresh_connection_info = regenerate_guacamole_session_access(
+                        session_id=session["session_id"],
+                        student_id=session.get("student_id", student_id),
+                        connection_id=guac_connection_id,
+                        existing_connection_info=connection_info,
+                    )
+                    
+                    if fresh_connection_info:
+                        # Update the session with the new connection info
+                        sessions_db.update_item(
+                            {"session_id": session["session_id"]},
+                            {
+                                "connection_info": fresh_connection_info,
+                                "updated_at": get_current_timestamp(),
+                            }
+                        )
+                        logger.info(f"[STALE_SESSION_CHECK] Regenerated session access, returning refreshed session")
+                        return success_response(
+                            {
+                                "session_id": session["session_id"],
+                                "status": session["status"],
+                                "instance_id": session.get("instance_id"),
+                                "connection_info": fresh_connection_info,
+                                "created_at": session.get("created_at"),
+                                "expires_at": session.get("expires_at"),
+                                "reused": True,
+                                "access_refreshed": True,
+                            },
+                            "Existing session found (access refreshed)"
+                        )
+                    else:
+                        logger.warning(f"[STALE_SESSION_CHECK] Failed to regenerate session access")
+                
+                # Fallback: return existing session as-is (might not work if token is invalid)
+                logger.info(f"[STALE_SESSION_CHECK] Returning existing session as-is")
                 return success_response(
                     {
                         "session_id": session["session_id"],
