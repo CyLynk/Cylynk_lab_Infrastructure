@@ -5,6 +5,28 @@
 
 /* ===== HIDE GUACAMOLE BRANDING ===== */
 
+/* Hide the entire version block containing "Apache Guacamole" and version number */
+.version,
+.login-ui .version,
+div.version {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Target the specific Angular elements */
+.app-name,
+.app-name.ng-binding,
+.version-number,
+.version-number.ng-binding {
+    display: none !important;
+    visibility: hidden !important;
+    font-size: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
 /* Hide the Apache Guacamole title completely */
 .login-ui .title,
 .login-ui h1,
