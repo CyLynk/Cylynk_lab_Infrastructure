@@ -269,7 +269,7 @@ def cleanup_stale_session(
     logger.info(f"[STALE_SESSION_CLEANUP] User {student_id} can now create a new session")
 
 
-git adddef regenerate_guacamole_session_access(
+def regenerate_guacamole_session_access(
     session_id: str,
     student_id: str,
     connection_id: str,
