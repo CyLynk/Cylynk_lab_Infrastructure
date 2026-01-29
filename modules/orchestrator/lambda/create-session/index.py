@@ -768,6 +768,17 @@ def handler(event, context):
                         instance_id = candidate_id
                         instance_ip = instance_info.get("PrivateIpAddress")
                         
+                        # Check if instance was recently released (Windows RDP needs time to reset)
+                        released_at = pool_record.get("released_at", 0)
+                        if released_at > 0:
+                            seconds_since_release = now - released_at
+                            if seconds_since_release < 15:
+                                # Instance was released recently - Windows RDP needs time to reset
+                                extra_delay = 15 - seconds_since_release
+                                logger.info(f"Instance {instance_id} was released {seconds_since_release}s ago, adding {extra_delay}s delay for RDP reset")
+                                import time
+                                time.sleep(extra_delay)
+                        
                         # Tag the instance
                         ec2_client.tag_instance(instance_id, {
                             "SessionId": session_id,
@@ -963,9 +974,11 @@ def handler(event, context):
                 
                 # Add delay after creating Guacamole connection to ensure it's fully initialized
                 # This prevents "disconnected" errors when the URL is opened immediately
+                # Windows RDP needs time to reset after previous sessions, especially if instance
+                # was recently released
                 import time
-                logger.info(f"Waiting for Guacamole connection to initialize before returning URL...")
-                time.sleep(1.5)
+                logger.info(f"Waiting for Guacamole connection and RDP service to initialize before returning URL...")
+                time.sleep(3.0)  # Increased delay for Windows RDP reset
                 logger.info(f"Guacamole connection initialization delay complete")
             
             # Update session as ready
