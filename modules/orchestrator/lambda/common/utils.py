@@ -883,15 +883,23 @@ class GuacamoleClient:
         The token allows bypassing the login page completely.
         
         Note: Guacamole tokens typically expire after some time (default ~60 min).
+        
+        IMPORTANT: Token must be BEFORE the # fragment to be sent to the server!
+        Wrong:   {base_url}/#/client/{encoded_id}?token={token}  <- token not sent
+        Correct: {base_url}/?token={token}#/client/{encoded_id}  <- token sent
         """
         if not self.token:
             if not self.authenticate():
                 return self.get_connection_url(connection_id)
         
-        conn_url = self.get_connection_url(connection_id)
         if self.token:
-            return f"{conn_url}?token={self.token}"
-        return conn_url
+            # Build URL with token BEFORE the fragment
+            import base64
+            encoded_id = base64.b64encode(
+                f"{connection_id}\x00c\x00{self.data_source}".encode()
+            ).decode()
+            return f"{self.base_url}/?token={self.token}#/client/{encoded_id}"
+        return self.get_connection_url(connection_id)
     
     def get_connection_activity(self, connection_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1210,8 +1218,14 @@ class GuacamoleClient:
             return None
         
         # Generate the URL with the user's token
-        conn_url = self.get_connection_url(connection_id)
-        return f"{conn_url}?token={user_token}"
+        # IMPORTANT: Token must be BEFORE the # fragment to be sent to the server!
+        # Wrong:   {base_url}/#/client/{encoded_id}?token={token}  <- token not sent
+        # Correct: {base_url}/?token={token}#/client/{encoded_id}  <- token sent
+        import base64
+        encoded_id = base64.b64encode(
+            f"{connection_id}\x00c\x00{self.data_source}".encode()
+        ).decode()
+        return f"{self.base_url}/?token={user_token}#/client/{encoded_id}"
 
 
 # =============================================================================
