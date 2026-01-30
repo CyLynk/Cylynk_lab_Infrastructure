@@ -52,7 +52,7 @@ h1.title,
   margin-bottom: 20px !important;
   padding-top: 20px !important;
   letter-spacing: 2px !important;
-  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5) !important;
+  text-shadow: 0 0 10px rgba(255, 87, 34, 0.5) !important;
 }
 
 /* Hide Apache Guacamole logo and replace with custom */
@@ -120,15 +120,15 @@ a[href*="LICENSE"],
 
 /* Root color variables */
 :root {
-  --cyberlab-primary: #00ff88;
-  --cyberlab-secondary: #00d4ff;
-  --cyberlab-bg-dark: #0a0a0a;
+  --cyberlab-primary: #FF5722;
+  --cyberlab-secondary: #0A0A0A;
+  --cyberlab-bg-dark: #0A0A0A;
   --cyberlab-bg-medium: #1a1a2e;
   --cyberlab-bg-light: #16213e;
   --cyberlab-text: #e0e0e0;
   --cyberlab-text-muted: #a0a0a0;
   --cyberlab-border: #333;
-  --cyberlab-glow: rgba(0, 255, 136, 0.3);
+  --cyberlab-glow: rgba(255, 87, 34, 0.3);
 }
 
 /* Login page background */
@@ -166,7 +166,7 @@ a[href*="LICENSE"],
 
 .login-ui input[type="text"]:focus,
 .login-ui input[type="password"]:focus {
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5) !important;
+  box-shadow: 0 0 10px rgba(255, 87, 34, 0.5) !important;
   outline: none !important;
 }
 
@@ -192,7 +192,7 @@ a[href*="LICENSE"],
 .login-ui button[type="submit"]:hover,
 .login-ui input[type="submit"]:hover,
 .login-ui .login-button:hover {
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.6) !important;
+  box-shadow: 0 0 20px rgba(255, 87, 34, 0.6) !important;
   transform: translateY(-2px) !important;
 }
 
