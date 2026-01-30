@@ -86,7 +86,6 @@ http {
             # Branding modifications
             sub_filter_types text/html;
             sub_filter '<title>Apache Guacamole</title>' '<title>CyberLab AttackBox</title>';
-            sub_filter 'href="images/favicon.ico"' 'href="app/ext/cyberlab-branding/images/logo.png"';
         }
 
         # Backward compatibility for /guacamole paths (API clients, lambdas)
@@ -109,7 +108,6 @@ http {
             # Branding modifications
             sub_filter_types text/html;
             sub_filter '<title>Apache Guacamole</title>' '<title>CyberLab AttackBox</title>';
-            sub_filter 'href="images/favicon.ico"' 'href="app/ext/cyberlab-branding/images/logo.png"';
         }
     }
 }
