@@ -65,6 +65,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
+      - ./nginx-branding:/etc/nginx/branding:ro
 {% if enable_lets_encrypt | default(false) and domain_name | default("") != "" %}
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro

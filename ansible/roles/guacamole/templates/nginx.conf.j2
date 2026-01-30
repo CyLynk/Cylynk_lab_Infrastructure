@@ -66,6 +66,13 @@ http {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "1; mode=block" always;
 
+        # Override favicon with custom logo
+        location = /favicon.ico {
+            alias /etc/nginx/branding/logo.png;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
         # Guacamole proxy - serve at root path (hide /guacamole)
         location / {
             proxy_pass http://guacamole/guacamole/;
