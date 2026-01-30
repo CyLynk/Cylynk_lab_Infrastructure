@@ -3,7 +3,6 @@
   "name": "CyberLab Branding",
   "namespace": "cyberlab-branding",
   "css": ["branding/style.css"],
-  "javascript": ["branding/script.js"],
   "resources": {
     "images/logo.png": "branding/images/logo.png"
   }
