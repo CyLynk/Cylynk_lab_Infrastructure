@@ -2,6 +2,11 @@
 # Guacamole custom branding deployment tasks
 # Removes all Apache Guacamole branding and applies CyberLab theme
 
+- name: Remove branding extension build directory if exists
+  ansible.builtin.file:
+    path: "{{ guacamole_base_dir }}/branding-build"
+    state: absent
+
 - name: Create branding extension build directory
   ansible.builtin.file:
     path: "{{ guacamole_base_dir }}/branding-build"
@@ -35,6 +40,11 @@
     owner: "{{ guacamole_user }}"
     group: "{{ guacamole_user }}"
     mode: "0755"
+
+- name: Remove existing branding JAR if exists
+  ansible.builtin.file:
+    path: "{{ guacamole_base_dir }}/extensions/cyberlab-branding.jar"
+    state: absent
 
 - name: Ensure zip is installed
   ansible.builtin.apt:
