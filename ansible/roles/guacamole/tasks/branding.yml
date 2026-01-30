@@ -66,23 +66,6 @@
     group: "{{ guacamole_user }}"
     mode: "0644"
 
-- name: Create branding directory for Nginx favicon
-  ansible.builtin.file:
-    path: "{{ guacamole_base_dir }}/nginx-branding"
-    state: directory
-    owner: "{{ guacamole_user }}"
-    group: "{{ guacamole_user }}"
-    mode: "0755"
-
-- name: Copy favicon for Nginx override
-  ansible.builtin.copy:
-    src: branding-extension/branding/images/logo.png
-    dest: "{{ guacamole_base_dir }}/nginx-branding/logo.png"
-    owner: "{{ guacamole_user }}"
-    group: "{{ guacamole_user }}"
-    mode: "0644"
-  notify: restart guacamole
-
 - name: Clean up branding build directory
   ansible.builtin.file:
     path: "{{ guacamole_base_dir }}/branding-build"

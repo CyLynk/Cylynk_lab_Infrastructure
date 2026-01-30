@@ -66,13 +66,6 @@ http {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "1; mode=block" always;
 
-        # Override favicon with custom logo
-        location = /favicon.ico {
-            alias /etc/nginx/branding/logo.png;
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-
         # Guacamole proxy - serve at root path (hide /guacamole)
         location / {
             proxy_pass http://guacamole/guacamole/;
@@ -89,6 +82,11 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_read_timeout 86400;
+
+            # Branding modifications
+            sub_filter_types text/html;
+            sub_filter '<title>Apache Guacamole</title>' '<title>CyberLab AttackBox</title>';
+            sub_filter 'href="images/favicon.ico"' 'href="app/ext/cyberlab-branding/images/logo.png"';
         }
 
         # Backward compatibility for /guacamole paths (API clients, lambdas)
@@ -107,6 +105,11 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_read_timeout 86400;
+
+            # Branding modifications
+            sub_filter_types text/html;
+            sub_filter '<title>Apache Guacamole</title>' '<title>CyberLab AttackBox</title>';
+            sub_filter 'href="images/favicon.ico"' 'href="app/ext/cyberlab-branding/images/logo.png"';
         }
     }
 }
