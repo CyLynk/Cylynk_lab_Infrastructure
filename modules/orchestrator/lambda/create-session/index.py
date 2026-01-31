@@ -338,6 +338,21 @@ def regenerate_guacamole_session_access(
             except Exception as e:
                 logger.warning(f"[REGENERATE_ACCESS] Failed to delete old user (continuing anyway): {e}")
         
+        # Force-kill any active tunnels/sessions for this connection
+        # This is CRITICAL to prevent "Disconnected" errors when max-connections is 1
+        logger.info(f"[REGENERATE_ACCESS] Force-killing active sessions for connection {connection_id}...")
+        try:
+            killed = guac.kill_active_sessions(connection_id)
+            if killed > 0:
+                logger.info(f"[REGENERATE_ACCESS] Successfully killed {killed} active session(s)")
+                # Small delay to allow Guacamole to fully release the connection
+                import time
+                time.sleep(2.0)
+            else:
+                logger.info(f"[REGENERATE_ACCESS] No active sessions found to kill")
+        except Exception as e:
+            logger.warning(f"[REGENERATE_ACCESS] Failed to kill active sessions (non-blocking): {e}")
+        
         # Switch to public URL for generating student-facing links
         guac.base_url = public_url
         
