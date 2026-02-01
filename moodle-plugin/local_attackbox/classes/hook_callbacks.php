@@ -70,6 +70,7 @@ class hook_callbacks {
         $button_position = get_config('local_attackbox', 'button_position') ?: 'bottom-right';
         $poll_interval = (int) get_config('local_attackbox', 'poll_interval') ?: 3000;
         $session_ttl = (int) get_config('local_attackbox', 'session_ttl_hours') ?: 4;
+        $open_in_new_tab = (bool) get_config('local_attackbox', 'open_in_new_tab');
 
         // Prepare minimal configuration for JavaScript.
         // Strings are loaded via Moodle's string API in JS to avoid data size warning.
@@ -82,6 +83,7 @@ class hook_callbacks {
             'buttonPosition' => $button_position,
             'pollInterval' => $poll_interval,
             'sessionTtlHours' => $session_ttl,
+            'openInNewTab' => $open_in_new_tab,  // Split-pane lab view vs new tab
         ];
 
         // Initialize the AMD module.

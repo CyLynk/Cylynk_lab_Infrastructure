@@ -172,6 +172,21 @@ if ($hassiteconfig) {
         PARAM_INT
     ));
 
+    // Lab View Configuration section.
+    $settings->add(new admin_setting_heading(
+        'local_attackbox/labview_heading',
+        get_string('settings:labview_heading', 'local_attackbox'),
+        get_string('settings:labview_heading_desc', 'local_attackbox')
+    ));
+
+    // Open in new tab (legacy behavior) vs split-pane view (recommended).
+    $settings->add(new admin_setting_configcheckbox(
+        'local_attackbox/open_in_new_tab',
+        get_string('settings:open_in_new_tab', 'local_attackbox'),
+        get_string('settings:open_in_new_tab_desc', 'local_attackbox'),
+        0  // Default to split-pane view (false)
+    ));
+
     $ADMIN->add('localplugins', $settings);
 
     // Add admin dashboard link if user has manage sessions capability.

@@ -180,6 +180,34 @@ $string['admin:provisioning_count'] = 'Provisioning';
 $string['admin:instances_used'] = 'Instances Used';
 $string['admin:error_loading'] = 'Error loading sessions';
 
+// Lab View (Split-Pane Interface).
+$string['lab:title'] = 'LynkBox Lab Environment';
+$string['lab:instructions'] = 'Instructions';
+$string['lab:terminal'] = 'Terminal';
+$string['lab:fullscreen'] = 'Fullscreen';
+$string['lab:exit_fullscreen'] = 'Exit Fullscreen';
+$string['lab:connection_lost'] = 'Connection lost. Please wait...';
+$string['lab:reconnecting'] = 'Reconnecting to your session...';
+$string['lab:back_to_moodle'] = 'Back to Dashboard';
+$string['lab:collapse_panel'] = 'Collapse instructions panel';
+$string['lab:expand_panel'] = 'Expand instructions panel';
+$string['lab:quick_tools'] = 'Quick Tools';
+$string['lab:notes'] = 'Notes';
+$string['lab:notes_placeholder'] = 'Take notes here... Your notes are saved locally in your browser.';
+$string['lab:notes_saved'] = 'Saved';
+$string['lab:notes_copy'] = 'Copy notes';
+$string['lab:notes_clear'] = 'Clear notes';
+$string['lab:notes_clear_confirm'] = 'Are you sure you want to clear all notes?';
+$string['lab:welcome_title'] = 'Welcome to LynkBox';
+$string['lab:welcome_message'] = 'Your Kali Linux hacking environment is ready. The terminal on the right gives you full access to security tools.';
+$string['lab:pro_tip'] = 'Pro Tip: Use the notes tab to save important findings, flags, and commands during your session.';
+
+// Settings - Lab View.
+$string['settings:labview_heading'] = 'Lab View Settings';
+$string['settings:labview_heading_desc'] = 'Configure the split-pane lab view experience.';
+$string['settings:open_in_new_tab'] = 'Open in new tab';
+$string['settings:open_in_new_tab_desc'] = 'If enabled, opens Guacamole in a new browser tab instead of the split-pane lab view. Recommended: Off for best experience.';
+
 // Capabilities.
 $string['attackbox:launch'] = 'Launch LynkBox sessions';
 $string['attackbox:configure'] = 'Configure LynkBox plugin settings';

@@ -894,7 +894,12 @@ define(["jquery", "core/str"], function ($, Str) {
 
       this.$button.on("click", function (e) {
         e.preventDefault();
-        // Always call launch() - the API will return existing session with fresh URL
+        // If we already have an active session with URL, open lab view directly
+        if (self.hasActiveSession && self.activeSessionUrl && self.sessionId) {
+          self.openLabView();
+          return;
+        }
+        // Otherwise launch a new session - the API will return existing session with fresh URL
         // This handles the case where user logged out of Guacamole (token invalidated)
         // but the session is still "active" in the backend
         self.launch();
@@ -924,7 +929,7 @@ define(["jquery", "core/str"], function ($, Str) {
       $("#attackbox-open").on("click", function (e) {
         e.preventDefault();
         if (self.activeSessionUrl) {
-          window.open(self.activeSessionUrl, "_blank", "noopener");
+          self.openLabView();
         }
         self.hideOverlay();
       });
@@ -1873,6 +1878,61 @@ define(["jquery", "core/str"], function ($, Str) {
       } else {
         this.$timerBadge.addClass("timer-high");
       }
+    }
+
+    /**
+     * Open the lab view (split-pane interface)
+     * Opens in the same window for immersive experience, or new tab based on config
+     */
+    openLabView() {
+      if (!this.activeSessionUrl || !this.sessionId) {
+        console.error("Cannot open lab view: missing session URL or ID");
+        return;
+      }
+
+      // Build lab view URL with session parameters
+      const labViewUrl = new URL(M.cfg.wwwroot + "/local/attackbox/lab.php");
+      labViewUrl.searchParams.set("session_id", this.sessionId);
+      labViewUrl.searchParams.set("guacamole_url", this.activeSessionUrl);
+
+      // Get current course ID if on a course page
+      const courseId = this.getCurrentCourseId();
+      if (courseId) {
+        labViewUrl.searchParams.set("course_id", courseId);
+      }
+
+      // Check if user prefers new tab or split-pane view
+      // Default to split-pane (same window) for THM/HTB-style experience
+      const openInNewTab = this.config.openInNewTab || false;
+
+      if (openInNewTab) {
+        // Open in new tab (legacy behavior)
+        window.open(labViewUrl.toString(), "_blank", "noopener");
+      } else {
+        // Navigate to split-pane lab view in same window
+        window.location.href = labViewUrl.toString();
+      }
+    }
+
+    /**
+     * Get current course ID from the page URL if available
+     * @returns {number|null} Course ID or null
+     */
+    getCurrentCourseId() {
+      // Try to get course ID from URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const courseId = urlParams.get("id") || urlParams.get("course");
+
+      if (courseId && window.location.pathname.includes("/course/")) {
+        return parseInt(courseId, 10);
+      }
+
+      // Try to get from Moodle's global course object
+      if (typeof M !== "undefined" && M.cfg && M.cfg.courseId && M.cfg.courseId > 1) {
+        return M.cfg.courseId;
+      }
+
+      return null;
     }
 
     /**
