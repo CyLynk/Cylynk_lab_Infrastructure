@@ -62,9 +62,17 @@ http {
 
         # Security headers
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "1; mode=block" always;
+        
+        # Frame embedding policy - allows Moodle LMS to embed Guacamole in split-pane lab view
+        # Using Content-Security-Policy frame-ancestors instead of X-Frame-Options for better control
+{% if allowed_frame_ancestors is defined and allowed_frame_ancestors | length > 0 %}
+        add_header Content-Security-Policy "frame-ancestors 'self' {{ allowed_frame_ancestors | join(' ') }};" always;
+{% else %}
+        # Default: Allow embedding from known Cylynk domains
+        add_header Content-Security-Policy "frame-ancestors 'self' https://academy.cyberlynk.io https://learn.cylynk.com https://dev.cylynk.com https://*.cylynk.com;" always;
+{% endif %}
 
         # Guacamole proxy - serve at root path (hide /guacamole)
         location / {

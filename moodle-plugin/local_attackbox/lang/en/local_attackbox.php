@@ -78,7 +78,7 @@ $string['position:topleft'] = 'Top Left';
 $string['button:launch'] = 'Launch LynkBox';
 $string['button:active'] = 'Open LynkBox';
 $string['button:terminate'] = 'End Session';
-$string['button:tooltip'] = 'Launch your personal Kali Linux hacking environment in the browser. No installation required!';
+$string['button:tooltip'] = 'Launch your personal Kali Linux environment in the browser. No installation required!';
 $string['button:tooltip_active'] = 'Click to open LynkBox or end your current session';
 $string['button:usage_dashboard'] = 'View usage history and statistics';
 
@@ -87,7 +87,7 @@ $string['timer:time_remaining'] = 'Time remaining';
 
 // Overlay text.
 $string['overlay:title'] = 'Deploying LynkBox';
-$string['overlay:subtitle'] = 'Initializing your secure hacking environment';
+$string['overlay:subtitle'] = 'Initialising your secure environment';
 $string['overlay:cancel'] = 'Cancel';
 
 // Error messages.
@@ -97,13 +97,13 @@ $string['error:close'] = 'Close';
 
 // Success messages.
 $string['success:title'] = 'LynkBox Ready';
-$string['success:message'] = 'Your secure hacking environment is now active.';
+$string['success:message'] = 'Your secure environment is now active.';
 $string['success:open'] = 'Open LynkBox';
 
 // Termination messages.
 $string['terminate:confirm'] = 'Are you sure you want to end your LynkBox session?';
-$string['terminate:success'] = 'Session terminated successfully';
-$string['terminate:error'] = 'Failed to terminate session';
+$string['terminate:success'] = 'Session ended successfully';
+$string['terminate:error'] = 'Failed to end session';
 
 // Idle detection messages.
 $string['idle:warning_title'] = 'Session Idle Warning';
@@ -113,11 +113,14 @@ $string['idle:keep_active'] = "I'm still here!";
 $string['idle:focus_mode'] = 'Enable Focus Mode';
 $string['idle:focus_mode_desc'] = 'Focus mode disables idle termination for this session (useful for long-running tasks).';
 $string['idle:terminated'] = 'Your session was terminated due to inactivity. You can launch a new session when needed.';
+$string['idle:expired'] = 'Your session has expired. Please launch a new session.';
+$string['idle:focus_enabled'] = 'Focus mode enabled. Idle termination is now disabled for this session.';
+$string['idle:quota_warning'] = 'You only have {$a} minutes remaining in your quota. Continue?';
 
 // Progress messages - these match the user's requested messages.
-$string['progress:5'] = 'Initializing virtual SOC environment...';
+$string['progress:5'] = 'Initialising virtual SOC environment...';
 $string['progress:10'] = 'Provisioning secure network tunnel...';
-$string['progress:18'] = 'Deploying attack simulation modules...';
+$string['progress:18'] = 'Deploying simulation modules...';
 $string['progress:25'] = 'Configuring VPN and firewall bypass rules...';
 $string['progress:33'] = 'Installing cyber tools: Nmap, Burp, Metasploit...';
 $string['progress:42'] = 'Injecting Kali Linux exploit lab environment...';
@@ -125,7 +128,7 @@ $string['progress:50'] = 'Loading anonymous sandbox identity...';
 $string['progress:62'] = 'Preparing you for red-team engagement...';
 $string['progress:70'] = 'Verifying secure stream to Guacamole...';
 $string['progress:85'] = 'Concealing your IP footprint...';
-$string['progress:94'] = 'Finalizing attack chain workspace...';
+$string['progress:94'] = 'Finalising workspace...';
 $string['progress:100'] = 'LynkBox ready — launching now 🚀';
 
 // Privacy.
@@ -179,6 +182,41 @@ $string['admin:active_now'] = 'Active Now';
 $string['admin:provisioning_count'] = 'Provisioning';
 $string['admin:instances_used'] = 'Instances Used';
 $string['admin:error_loading'] = 'Error loading sessions';
+
+// Lab View (Split-Pane Interface).
+$string['lab:title'] = 'LynkBox Lab Environment';
+$string['lab:instructions'] = 'Instructions';
+$string['lab:terminal'] = 'Terminal';
+$string['lab:fullscreen'] = 'Fullscreen';
+$string['lab:exit_fullscreen'] = 'Exit Fullscreen';
+$string['lab:connection_lost'] = 'Connection lost. Please wait...';
+$string['lab:reconnecting'] = 'Reconnecting to your session...';
+$string['lab:back_to_moodle'] = 'Back to Dashboard';
+$string['lab:collapse_panel'] = 'Collapse instructions panel';
+$string['lab:expand_panel'] = 'Expand instructions panel';
+$string['lab:quick_tools'] = 'Quick Tools';
+$string['lab:notes'] = 'Notes';
+$string['lab:notes_placeholder'] = 'Take notes here... Your notes are saved locally in your browser.';
+$string['lab:notes_saved'] = 'Saved';
+$string['lab:notes_copy'] = 'Copy notes';
+$string['lab:notes_clear'] = 'Clear notes';
+$string['lab:notes_clear_confirm'] = 'Are you sure you want to clear all notes?';
+$string['lab:welcome_title'] = 'Welcome to LynkBox';
+$string['lab:welcome_message'] = 'Your Kali Linux environment is ready. The terminal on the right gives you full access to security tools.';
+$string['lab:pro_tip'] = 'Pro Tip: Use the notes tab to save important findings, flags, and commands during your session.';
+
+// Settings - Lab View.
+$string['settings:labview_heading'] = 'Lab View Settings';
+$string['settings:labview_heading_desc'] = 'Configure the split-pane lab view experience.';
+$string['settings:open_in_new_tab'] = 'Open in new tab';
+$string['settings:open_in_new_tab_desc'] = 'If enabled, opens Guacamole in a new browser tab instead of the split-pane lab view. Recommended: Off for best experience.';
+
+// Modal dialogs.
+$string['modal:confirm'] = 'Confirm';
+$string['modal:cancel'] = 'Cancel';
+$string['modal:ok'] = 'OK';
+$string['modal:yes'] = 'Yes';
+$string['modal:no'] = 'No';
 
 // Capabilities.
 $string['attackbox:launch'] = 'Launch LynkBox sessions';

@@ -40,3 +40,12 @@ guacamole_branding_enabled: true
 
 # Whether to clean up build files after creating extension
 guacamole_cleanup_build_files: true
+
+# Allowed frame ancestors for embedding Guacamole in iframes
+# Used by the split-pane lab view in Moodle plugin
+# Add your Moodle domain(s) here to enable iframe embedding
+allowed_frame_ancestors:
+  - "https://academy.cyberlynk.io"
+  - "https://learn.cylynk.com"
+  - "https://dev.cylynk.com"
+  - "https://*.cylynk.com"

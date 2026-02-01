@@ -152,14 +152,32 @@ define(["jquery", "core/str"], function ($, Str) {
      * Initialize the launcher
      */
     init() {
+      // Check if we're running inside an embedded iframe (split-pane left panel)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("lynkbox_embedded") === "1") {
+        console.log("[LynkBox] Running in embedded mode - launcher disabled");
+        // Don't show launcher in embedded mode, but keep the page functional
+        return;
+      }
+
       this.createButton();
       this.createOverlay();
       this.createNotificationBanner();
       this.createIdleWarningModal();
       this.createUsageDashboardLink();
+      this.createModal();
       this.bindEvents();
       this.bindIdleDetectionEvents();
       this.updateUsageDisplay();
+
+      // Restore minimised state from localStorage
+      if (localStorage.getItem("lynkbox-launcher-minimised") === "true") {
+        this.$launcher.addClass("minimised");
+        this.$restoreButton.show();
+      }
+
+      // Check and restore split-pane state (for page refresh persistence)
+      this.checkAndRestoreSplitPane();
 
       // Check for existing session after a short delay to ensure all is initialized
       setTimeout(() => {
@@ -499,8 +517,10 @@ define(["jquery", "core/str"], function ($, Str) {
       await this.sendHeartbeat();
 
       // Show confirmation
-      alert(
-        "Focus mode enabled. Idle termination is now disabled for this session."
+      this.showAlert(
+        "Focus mode enabled. Idle termination is now disabled for this session.",
+        "Focus Mode",
+        "success"
       );
     }
 
@@ -515,6 +535,9 @@ define(["jquery", "core/str"], function ($, Str) {
       this.hasActiveSession = false;
       this.activeSessionUrl = null;
 
+      // Close split-pane view if open (returns to normal Moodle view)
+      this.closeSplitPane();
+
       // Reset UI
       this.$button.removeClass("attackbox-btn-active");
       this.$button.find(".attackbox-btn-text").text(this.strings.buttonText);
@@ -523,8 +546,10 @@ define(["jquery", "core/str"], function ($, Str) {
 
       // Show message to user
       if (reason === "idle_timeout") {
-        alert(
-          "Your session was terminated due to inactivity. You can launch a new session when needed."
+        this.showAlert(
+          "Your session was terminated due to inactivity. You can launch a new session when needed.",
+          "Session Ended",
+          "warning"
         );
       }
     }
@@ -702,12 +727,25 @@ define(["jquery", "core/str"], function ($, Str) {
                         </span>
                         <span class="attackbox-btn-text">${this.strings.buttonTerminate}</span>
                     </button>
+                    <button id="attackbox-minimize-btn" class="attackbox-btn-minimize" type="button" title="Minimise launcher">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
                 </div>
+                <button id="attackbox-restore-btn" class="attackbox-btn-restore ${positionClasses[position]}" type="button" title="Show LynkBox launcher" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M7 8l3 3-3 3"></path>
+                    </svg>
+                </button>
             `;
 
       $("body").append(html);
       this.$button = $("#attackbox-btn");
       this.$terminateButton = $("#attackbox-terminate-btn");
+      this.$minimizeButton = $("#attackbox-minimize-btn");
+      this.$restoreButton = $("#attackbox-restore-btn");
       this.$launcher = $("#attackbox-launcher");
       this.$timerBadge = $("#attackbox-timer-badge");
       this.$timerText = $("#attackbox-timer-text");
@@ -754,120 +792,284 @@ define(["jquery", "core/str"], function ($, Str) {
     }
 
     /**
-     * Create the fullscreen overlay
+     * Create the custom modal dialog (replaces native alert/confirm)
+     */
+    createModal() {
+      const html = `
+        <div id="lynkbox-modal-overlay" class="lynkbox-modal-overlay" style="display: none;">
+          <div class="lynkbox-modal">
+            <div class="lynkbox-modal-header">
+              <div class="lynkbox-modal-icon" id="lynkbox-modal-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <h3 class="lynkbox-modal-title" id="lynkbox-modal-title">Confirm</h3>
+            </div>
+            <div class="lynkbox-modal-body">
+              <p class="lynkbox-modal-message" id="lynkbox-modal-message"></p>
+            </div>
+            <div class="lynkbox-modal-footer" id="lynkbox-modal-footer">
+              <button id="lynkbox-modal-cancel" class="lynkbox-modal-btn lynkbox-modal-btn-secondary">Cancel</button>
+              <button id="lynkbox-modal-confirm" class="lynkbox-modal-btn lynkbox-modal-btn-primary">Confirm</button>
+            </div>
+          </div>
+        </div>
+      `;
+      $("body").append(html);
+      this.$modal = $("#lynkbox-modal-overlay");
+      this.$modalTitle = $("#lynkbox-modal-title");
+      this.$modalMessage = $("#lynkbox-modal-message");
+      this.$modalIcon = $("#lynkbox-modal-icon");
+      this.$modalFooter = $("#lynkbox-modal-footer");
+    }
+
+    /**
+     * Show a custom alert modal (replaces native alert)
+     * @param {string} message - The message to display
+     * @param {string} title - Optional title (default: "Notice")
+     * @param {string} type - Optional type: "info", "success", "warning", "error" (default: "info")
+     * @returns {Promise} Resolves when user clicks OK
+     */
+    showAlert(message, title = "Notice", type = "info") {
+      return new Promise((resolve) => {
+        this.$modalTitle.text(title);
+        this.$modalMessage.html(message);
+        
+        // Set icon based on type
+        this.setModalIcon(type);
+        
+        // Show only OK button for alerts
+        this.$modalFooter.html(`
+          <button id="lynkbox-modal-ok" class="lynkbox-modal-btn lynkbox-modal-btn-primary">OK</button>
+        `);
+        
+        // Bind OK button
+        $("#lynkbox-modal-ok").off("click").on("click", () => {
+          this.$modal.fadeOut(200);
+          resolve();
+        });
+        
+        // Show modal
+        this.$modal.fadeIn(200);
+        
+        // Focus OK button
+        setTimeout(() => $("#lynkbox-modal-ok").focus(), 100);
+      });
+    }
+
+    /**
+     * Show a custom confirm modal (replaces native confirm)
+     * @param {string} message - The message to display
+     * @param {string} title - Optional title (default: "Confirm")
+     * @param {object} options - Optional: { confirmText, cancelText, type }
+     * @returns {Promise<boolean>} Resolves with true (confirm) or false (cancel)
+     */
+    showConfirm(message, title = "Confirm", options = {}) {
+      return new Promise((resolve) => {
+        const confirmText = options.confirmText || "Yes";
+        const cancelText = options.cancelText || "Cancel";
+        const type = options.type || "warning";
+        
+        this.$modalTitle.text(title);
+        this.$modalMessage.html(message);
+        
+        // Set icon based on type
+        this.setModalIcon(type);
+        
+        // Show confirm/cancel buttons
+        this.$modalFooter.html(`
+          <button id="lynkbox-modal-cancel" class="lynkbox-modal-btn lynkbox-modal-btn-secondary">${cancelText}</button>
+          <button id="lynkbox-modal-confirm" class="lynkbox-modal-btn lynkbox-modal-btn-primary">${confirmText}</button>
+        `);
+        
+        // Bind buttons
+        $("#lynkbox-modal-cancel").off("click").on("click", () => {
+          this.$modal.fadeOut(200);
+          resolve(false);
+        });
+        
+        $("#lynkbox-modal-confirm").off("click").on("click", () => {
+          this.$modal.fadeOut(200);
+          resolve(true);
+        });
+        
+        // Show modal
+        this.$modal.fadeIn(200);
+        
+        // Focus confirm button
+        setTimeout(() => $("#lynkbox-modal-confirm").focus(), 100);
+      });
+    }
+
+    /**
+     * Set the modal icon based on type
+     * @param {string} type - "info", "success", "warning", "error"
+     */
+    setModalIcon(type) {
+      const icons = {
+        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>`,
+        success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                   <polyline points="22 4 12 14.01 9 11.01"/>
+                 </svg>`,
+        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                   <line x1="12" y1="9" x2="12" y2="13"/>
+                   <line x1="12" y1="17" x2="12.01" y2="17"/>
+                 </svg>`,
+        error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                 <circle cx="12" cy="12" r="10"/>
+                 <line x1="15" y1="9" x2="9" y2="15"/>
+                 <line x1="9" y1="9" x2="15" y2="15"/>
+               </svg>`
+      };
+      
+      this.$modalIcon.html(icons[type] || icons.info);
+      this.$modal.find(".lynkbox-modal").removeClass("modal-info modal-success modal-warning modal-error").addClass(`modal-${type}`);
+    }
+
+    /**
+     * Minimise the launcher (hide buttons, show small restore button)
+     */
+    minimiseLauncher() {
+      this.$launcher.addClass("minimised");
+      this.$restoreButton.fadeIn(200);
+      // Save preference
+      localStorage.setItem("lynkbox-launcher-minimised", "true");
+    }
+
+    /**
+     * Restore the launcher from minimised state
+     */
+    restoreLauncher() {
+      this.$launcher.removeClass("minimised");
+      this.$restoreButton.fadeOut(200);
+      // Save preference
+      localStorage.setItem("lynkbox-launcher-minimised", "false");
+    }
+
+    /**
+     * Create the fullscreen overlay - Modern compact cyber design
      */
     createOverlay() {
       const html = `
                 <div id="attackbox-overlay" class="attackbox-overlay" style="display: none;">
-                    <div class="attackbox-overlay-scanlines"></div>
+                    <div class="attackbox-overlay-backdrop"></div>
                     <div class="attackbox-overlay-content">
+                        <!-- Decorative cyber elements -->
+                        <div class="attackbox-cyber-corner attackbox-cyber-corner-tl"></div>
+                        <div class="attackbox-cyber-corner attackbox-cyber-corner-tr"></div>
+                        <div class="attackbox-cyber-corner attackbox-cyber-corner-bl"></div>
+                        <div class="attackbox-cyber-corner attackbox-cyber-corner-br"></div>
+                        
+                        <!-- Header with animated logo -->
                         <div class="attackbox-overlay-header">
                             <div class="attackbox-overlay-logo">
-                                <svg viewBox="0 0 100 100" class="attackbox-logo-svg">
-                                    <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"/>
-                                    <circle cx="50" cy="50" r="35" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
-                                    <path d="M50 20 L50 80 M20 50 L80 50" stroke="currentColor" stroke-width="1" opacity="0.3"/>
-                                    <circle cx="50" cy="50" r="8" fill="currentColor" class="attackbox-logo-core"/>
-                                    <path d="M30 30 L50 50 L70 30" fill="none" stroke="currentColor" stroke-width="2" class="attackbox-logo-arrow"/>
+                                <div class="attackbox-logo-ring"></div>
+                                <div class="attackbox-logo-ring attackbox-logo-ring-2"></div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="attackbox-logo-icon">
+                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                    <path d="M7 8l3 3-3 3"/>
+                                    <line x1="12" y1="14" x2="17" y2="14"/>
                                 </svg>
                             </div>
-                            <h1 class="attackbox-overlay-title">${this.strings.overlayTitle}</h1>
-                            <p class="attackbox-overlay-subtitle">${this.strings.overlaySubtitle}</p>
+                            <div class="attackbox-overlay-titles">
+                                <h1 class="attackbox-overlay-title">${this.strings.overlayTitle}</h1>
+                                <p class="attackbox-overlay-subtitle">${this.strings.overlaySubtitle}</p>
+                            </div>
                         </div>
 
-                        <div class="attackbox-progress-container">
+                        <!-- Progress section -->
+                        <div class="attackbox-progress-section">
                             <div class="attackbox-progress-bar">
-                                <div class="attackbox-progress-fill" id="attackbox-progress-fill"></div>
-                                <div class="attackbox-progress-glow"></div>
+                                <div class="attackbox-progress-track">
+                                    <div class="attackbox-progress-fill" id="attackbox-progress-fill"></div>
+                                </div>
+                                <span class="attackbox-progress-percent" id="attackbox-progress-percent">0%</span>
                             </div>
-                            <div class="attackbox-progress-text">
-                                <span id="attackbox-progress-percent">0%</span>
-                                <span id="attackbox-time-estimate" class="attackbox-time-estimate"></span>
+                            <span id="attackbox-time-estimate" class="attackbox-time-estimate"></span>
+                        </div>
+
+                        <!-- Terminal output -->
+                        <div class="attackbox-terminal-mini">
+                            <div class="attackbox-terminal-header">
+                                <div class="attackbox-terminal-dots">
+                                    <span></span><span></span><span></span>
+                                </div>
+                                <span class="attackbox-terminal-title">terminal</span>
+                            </div>
+                            <div class="attackbox-terminal-output">
+                                <span class="attackbox-terminal-prompt">$</span>
+                                <span id="attackbox-status-message" class="attackbox-status-message"></span>
+                                <span class="attackbox-cursor"></span>
                             </div>
                         </div>
 
-                        <div class="attackbox-status-container">
-                            <div class="attackbox-terminal">
-                                <div class="attackbox-terminal-header">
-                                    <span class="attackbox-terminal-dot red"></span>
-                                    <span class="attackbox-terminal-dot yellow"></span>
-                                    <span class="attackbox-terminal-dot green"></span>
-                                    <span class="attackbox-terminal-title">cyberlynk@lynkbox:~$</span>
-                                </div>
-                                <div class="attackbox-terminal-body">
-                                    <div id="attackbox-status-message" class="attackbox-status-message">
-                                        <span class="attackbox-cursor">▋</span>
-                                    </div>
-                                </div>
+                        <!-- Tip section - compact -->
+                        <div class="attackbox-tip-section">
+                            <span class="attackbox-tip-icon">💡</span>
+                            <div class="attackbox-tip-content">
+                                <span class="attackbox-tip-label">Did you know?</span>
+                                <span id="attackbox-edu-text" class="attackbox-tip-text">Loading security tools...</span>
                             </div>
                         </div>
 
-                        <!-- Educational Content -->
-                        <div class="attackbox-edu-container">
-                            <div class="attackbox-edu-header">
-                                <svg class="attackbox-edu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <path d="M12 16v-4M12 8h.01"/>
-                                </svg>
-                                <span class="attackbox-edu-title">Did you know?</span>
-                            </div>
-                            <div class="attackbox-edu-content">
-                                <div id="attackbox-edu-text" class="attackbox-edu-text"></div>
-                            </div>
-                            <div class="attackbox-edu-visual">
-                                <div id="attackbox-attack-viz" class="attackbox-attack-viz">
-                                    <div class="attackbox-attack-node attackbox-attacker">
-                                        <span class="attackbox-node-icon">&#128100;</span>
-                                        <span class="attackbox-node-label">Attacker</span>
-                                    </div>
-                                    <div class="attackbox-attack-path" id="attackbox-attack-path"></div>
-                                    <div class="attackbox-attack-node attackbox-target">
-                                        <span class="attackbox-node-icon">&#127919;</span>
-                                        <span class="attackbox-node-label">Target</span>
-                                    </div>
-                                </div>
-                                <div id="attackbox-attack-label" class="attackbox-attack-label"></div>
-                            </div>
-                        </div>
-
-                        <div class="attackbox-actions">
-                            <button id="attackbox-cancel" class="attackbox-btn-cancel" type="button">
-                                ${this.strings.cancelButton}
-                            </button>
-                        </div>
+                        <!-- Cancel button -->
+                        <button id="attackbox-cancel" class="attackbox-btn-cancel" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            ${this.strings.cancelButton}
+                        </button>
                     </div>
 
                     <!-- Success state -->
                     <div id="attackbox-success" class="attackbox-success-container" style="display: none;">
-                        <div class="attackbox-success-icon">
+                        <div class="attackbox-state-icon attackbox-state-success">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <path d="M8 12l2 2 4-4"/>
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
                         </div>
-                        <h2 class="attackbox-success-title">${this.strings.successTitle}</h2>
-                        <p class="attackbox-success-message">${this.strings.successMessage}</p>
-                        <button id="attackbox-open" class="attackbox-btn-success" type="button">
+                        <h2 class="attackbox-state-title">${this.strings.successTitle}</h2>
+                        <p class="attackbox-state-message">${this.strings.successMessage}</p>
+                        <button id="attackbox-open" class="attackbox-btn-primary" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                <path d="M7 8l3 3-3 3"/>
+                            </svg>
                             ${this.strings.successOpen}
                         </button>
                     </div>
 
                     <!-- Error state -->
                     <div id="attackbox-error" class="attackbox-error-container" style="display: none;">
-                        <div class="attackbox-error-icon">
+                        <div class="attackbox-state-icon attackbox-state-error">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"/>
                                 <line x1="15" y1="9" x2="9" y2="15"/>
                                 <line x1="9" y1="9" x2="15" y2="15"/>
                             </svg>
                         </div>
-                        <h2 class="attackbox-error-title">${this.strings.errorTitle}</h2>
-                        <p id="attackbox-error-message" class="attackbox-error-message"></p>
-                        <div class="attackbox-error-actions">
-                            <button id="attackbox-retry" class="attackbox-btn-retry" type="button">
+                        <h2 class="attackbox-state-title attackbox-state-title-error">${this.strings.errorTitle}</h2>
+                        <p id="attackbox-error-message" class="attackbox-state-message"></p>
+                        <div class="attackbox-state-actions">
+                            <button id="attackbox-retry" class="attackbox-btn-primary" type="button">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="23 4 23 10 17 10"/>
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                                </svg>
                                 ${this.strings.errorRetry}
                             </button>
-                            <button id="attackbox-close-error" class="attackbox-btn-close" type="button">
+                            <button id="attackbox-close-error" class="attackbox-btn-secondary" type="button">
                                 ${this.strings.errorClose}
                             </button>
                         </div>
@@ -894,7 +1096,12 @@ define(["jquery", "core/str"], function ($, Str) {
 
       this.$button.on("click", function (e) {
         e.preventDefault();
-        // Always call launch() - the API will return existing session with fresh URL
+        // If we already have an active session with URL, open lab view directly
+        if (self.hasActiveSession && self.activeSessionUrl && self.sessionId) {
+          self.openLabView();
+          return;
+        }
+        // Otherwise launch a new session - the API will return existing session with fresh URL
         // This handles the case where user logged out of Guacamole (token invalidated)
         // but the session is still "active" in the backend
         self.launch();
@@ -924,7 +1131,7 @@ define(["jquery", "core/str"], function ($, Str) {
       $("#attackbox-open").on("click", function (e) {
         e.preventDefault();
         if (self.activeSessionUrl) {
-          window.open(self.activeSessionUrl, "_blank", "noopener");
+          self.openLabView();
         }
         self.hideOverlay();
       });
@@ -934,6 +1141,18 @@ define(["jquery", "core/str"], function ($, Str) {
         if (e.key === "Escape" && self.$overlay.is(":visible")) {
           self.cancel();
         }
+      });
+
+      // Minimise/restore launcher buttons
+      this.$minimizeButton.on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        self.minimiseLauncher();
+      });
+
+      this.$restoreButton.on("click", function (e) {
+        e.preventDefault();
+        self.restoreLauncher();
       });
     }
 
@@ -946,7 +1165,8 @@ define(["jquery", "core/str"], function ($, Str) {
       }
 
       // Check quota before launching
-      if (!this.checkQuotaBeforeLaunch()) {
+      const quotaOk = await this.checkQuotaBeforeLaunch();
+      if (!quotaOk) {
         return;
       }
 
@@ -1386,8 +1606,26 @@ define(["jquery", "core/str"], function ($, Str) {
      * Update progress display
      */
     updateProgress(percent, message, timeEstimate) {
-      this.$progressFill.css("width", percent + "%");
-      this.$progressPercent.text(percent + "%");
+      // Use direct DOM query to ensure elements are found
+      const $fill = $("#attackbox-progress-fill");
+      const $percent = $("#attackbox-progress-percent");
+      
+      if ($fill.length) {
+        $fill.css("width", percent + "%");
+      }
+      if ($percent.length) {
+        $percent.text(percent + "%");
+      }
+
+      // Also update instance references if they exist
+      if (this.$progressFill && this.$progressFill.length) {
+        this.$progressFill.css("width", percent + "%");
+      }
+      if (this.$progressPercent && this.$progressPercent.length) {
+        this.$progressPercent.text(percent + "%");
+      }
+
+      console.log("[LynkBox] Progress updated:", percent + "%", message);
 
       if (message) {
         this.typeMessage(message);
@@ -1659,7 +1897,7 @@ define(["jquery", "core/str"], function ($, Str) {
     /**
      * Check quota before launching
      */
-    checkQuotaBeforeLaunch() {
+    async checkQuotaBeforeLaunch() {
       if (!this.currentUsageData) {
         return true; // No data yet, allow launch
       }
@@ -1680,8 +1918,11 @@ define(["jquery", "core/str"], function ($, Str) {
 
       // Warn if very low (< 10 minutes remaining)
       if (data.hours_limit !== "Unlimited" && data.minutes_remaining < 10) {
-        const confirmMsg = `You only have ${data.minutes_remaining} minutes remaining in your quota. Continue?`;
-        return confirm(confirmMsg);
+        return await this.showConfirm(
+          `You only have <strong>${data.minutes_remaining} minutes</strong> remaining in your quota.<br><br>Do you want to continue?`,
+          "Low Quota Warning",
+          { confirmText: "Continue", cancelText: "Cancel", type: "warning" }
+        );
       }
 
       return true;
@@ -1842,7 +2083,9 @@ define(["jquery", "core/str"], function ($, Str) {
             .text(this.strings.buttonText);
           this.$button.attr("title", this.strings.buttonTooltip);
           this.$terminateButton.hide();
-          alert("Your session has expired. Please launch a new session.");
+          // Close split pane if open
+          this.closeSplitPane();
+          this.showAlert("Your session has expired. Please launch a new session.", "Session Expired", "warning");
         }, 2000);
         return;
       }
@@ -1873,6 +2116,442 @@ define(["jquery", "core/str"], function ($, Str) {
       } else {
         this.$timerBadge.addClass("timer-high");
       }
+
+      // Also update split-pane timer if visible
+      this.updateSplitTimer();
+    }
+
+    /**
+     * Open the lab view (split-pane interface)
+     * Injects a split-pane overlay on the CURRENT page so students can see
+     * lab instructions alongside the AttackBox terminal
+     */
+    openLabView() {
+      console.log("[LynkBox] openLabView called", {
+        activeSessionUrl: this.activeSessionUrl,
+        sessionId: this.sessionId,
+        openInNewTab: this.config.openInNewTab
+      });
+
+      if (!this.activeSessionUrl || !this.sessionId) {
+        console.error("[LynkBox] Cannot open lab view: missing session URL or ID");
+        return;
+      }
+
+      // Check if user prefers new tab instead (admin setting)
+      // Default is FALSE (split-pane view)
+      const openInNewTab = this.config.openInNewTab === true;
+
+      console.log("[LynkBox] openInNewTab setting:", openInNewTab);
+
+      if (openInNewTab) {
+        // Open in new tab (legacy behavior - only if explicitly enabled)
+        console.log("[LynkBox] Opening in new tab (admin setting enabled)");
+        window.open(this.activeSessionUrl, "_blank", "noopener");
+        return;
+      }
+
+      // Check if split-pane is already open
+      if ($("#lynkbox-split-container").length > 0) {
+        console.log("[LynkBox] Split-pane already open, showing it");
+        $("#lynkbox-split-container").show();
+        return;
+      }
+
+      // Inject split-pane overlay on current page
+      console.log("[LynkBox] Injecting split-pane view");
+      this.injectSplitPane();
+    }
+
+    /**
+     * Inject the split-pane container into the current page
+     * Uses iframes for both Moodle content and Guacamole for full interactivity
+     */
+    injectSplitPane() {
+      const self = this;
+      console.log("[LynkBox] injectSplitPane called with URL:", this.activeSessionUrl);
+
+      // Get current page URL for the Moodle iframe
+      const currentUrl = window.location.href;
+      
+      // Add a parameter to prevent infinite split-pane loops
+      const moodleUrl = new URL(currentUrl);
+      moodleUrl.searchParams.set("lynkbox_embedded", "1");
+
+      // Create the split-pane container HTML
+      const splitPaneHtml = `
+        <div id="lynkbox-split-container" class="lynkbox-split-container">
+          <!-- Header bar -->
+          <div class="lynkbox-split-header">
+            <div class="lynkbox-split-header-left">
+              <span class="lynkbox-split-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                  <path d="M7 8l3 3-3 3M12 14h4"></path>
+                </svg>
+                LynkBox Active
+              </span>
+              <span class="lynkbox-split-timer" id="lynkbox-split-timer"></span>
+            </div>
+            <div class="lynkbox-split-header-right">
+              <button id="lynkbox-split-swap" class="lynkbox-split-btn" title="Swap panels">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+              </button>
+              <button id="lynkbox-split-fullscreen" class="lynkbox-split-btn" title="Fullscreen terminal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+                </svg>
+              </button>
+              <button id="lynkbox-split-newtab" class="lynkbox-split-btn" title="Open in new tab">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                  <polyline points="15,3 21,3 21,9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </button>
+              <button id="lynkbox-split-endsession" class="lynkbox-split-btn lynkbox-split-btn-end" title="End Session">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                </svg>
+                <span>End</span>
+              </button>
+              <button id="lynkbox-split-close" class="lynkbox-split-btn" title="Minimise (keep session running)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Split pane content -->
+          <div class="lynkbox-split-content">
+            <!-- Moodle content panel (left) - now an iframe for full interactivity -->
+            <div class="lynkbox-split-panel lynkbox-moodle-panel" id="lynkbox-moodle-panel">
+              <iframe 
+                id="lynkbox-moodle-frame"
+                class="lynkbox-moodle-frame"
+                src="${moodleUrl.toString()}"
+                allow="fullscreen">
+              </iframe>
+            </div>
+            
+            <!-- Resizer handle -->
+            <div class="lynkbox-split-resizer" id="lynkbox-split-resizer">
+              <div class="lynkbox-resizer-line"></div>
+            </div>
+            
+            <!-- Guacamole terminal panel (right) -->
+            <div class="lynkbox-split-panel lynkbox-terminal-panel" id="lynkbox-terminal-panel">
+              <iframe 
+                id="lynkbox-guacamole-frame"
+                class="lynkbox-guacamole-frame"
+                src="${this.activeSessionUrl}"
+                allow="clipboard-read; clipboard-write; fullscreen"
+                allowfullscreen>
+              </iframe>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Inject the split-pane container
+      $("body").append(splitPaneHtml);
+
+      // Hide the original page content
+      $("body").children().not("#lynkbox-split-container, .attackbox-launcher, .attackbox-overlay, .attackbox-quota-notification, .attackbox-idle-warning, .lynkbox-modal-overlay, .attackbox-btn-restore, script, style, link, noscript").addClass("lynkbox-hidden-original");
+
+      // Add body class to prevent scrolling on main page
+      $("body").addClass("lynkbox-split-active");
+
+      // Save split-pane state to sessionStorage for persistence across refreshes
+      this.saveSplitPaneState();
+
+      // Bind split-pane events
+      this.bindSplitPaneEvents();
+
+      // Update timer display in split header
+      this.updateSplitTimer();
+
+      console.log("[LynkBox] Split-pane injection complete. Container exists:", $("#lynkbox-split-container").length > 0);
+    }
+
+    /**
+     * Save split-pane state to sessionStorage
+     */
+    saveSplitPaneState() {
+      const state = {
+        active: true,
+        sessionId: this.sessionId,
+        guacamoleUrl: this.activeSessionUrl,
+        expiresAt: this.sessionExpiresAt ? this.sessionExpiresAt.toISOString() : null
+      };
+      sessionStorage.setItem("lynkbox-split-state", JSON.stringify(state));
+      console.log("[LynkBox] Split-pane state saved:", state);
+    }
+
+    /**
+     * Clear split-pane state from sessionStorage
+     */
+    clearSplitPaneState() {
+      sessionStorage.removeItem("lynkbox-split-state");
+      console.log("[LynkBox] Split-pane state cleared");
+    }
+
+    /**
+     * Check and restore split-pane state on page load
+     */
+    checkAndRestoreSplitPane() {
+      // Don't restore if we're already in an embedded iframe
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("lynkbox_embedded") === "1") {
+        console.log("[LynkBox] Running in embedded mode, skipping split-pane restore");
+        return;
+      }
+
+      const stateJson = sessionStorage.getItem("lynkbox-split-state");
+      if (!stateJson) {
+        return;
+      }
+
+      try {
+        const state = JSON.parse(stateJson);
+        console.log("[LynkBox] Found saved split-pane state:", state);
+
+        if (state.active && state.sessionId && state.guacamoleUrl) {
+          // Check if session hasn't expired
+          if (state.expiresAt) {
+            const expiresAt = new Date(state.expiresAt);
+            if (expiresAt <= new Date()) {
+              console.log("[LynkBox] Saved session has expired, clearing state");
+              this.clearSplitPaneState();
+              return;
+            }
+            this.sessionExpiresAt = expiresAt;
+          }
+
+          // Restore session data
+          this.sessionId = state.sessionId;
+          this.activeSessionUrl = state.guacamoleUrl;
+          this.hasActiveSession = true;
+
+          // Update button state
+          this.$button.addClass("attackbox-btn-active");
+          this.$button.find(".attackbox-btn-text").text(this.strings.buttonTextActive);
+          this.$button.attr("title", this.strings.buttonTooltipActive);
+          this.$terminateButton.show();
+
+          // Start timer if we have expiry
+          if (this.sessionExpiresAt) {
+            this.startSessionTimer(this.sessionExpiresAt.toISOString());
+          }
+
+          // Start heartbeat
+          this.startHeartbeat();
+
+          // Restore the split-pane view
+          console.log("[LynkBox] Restoring split-pane view");
+          this.injectSplitPane();
+        }
+      } catch (e) {
+        console.error("[LynkBox] Error restoring split-pane state:", e);
+        this.clearSplitPaneState();
+      }
+    }
+
+    /**
+     * Bind events for the split-pane interface
+     */
+    bindSplitPaneEvents() {
+      const self = this;
+
+      // Minimize button - close split view but keep session running
+      $("#lynkbox-split-close").on("click", function () {
+        self.closeSplitPane();
+      });
+
+      // End Session button - terminate session and close split view
+      $("#lynkbox-split-endsession").on("click", function () {
+        self.terminateSession();
+      });
+
+      // Open in new tab button
+      $("#lynkbox-split-newtab").on("click", function () {
+        window.open(self.activeSessionUrl, "_blank", "noopener");
+      });
+
+      // Swap panels button
+      $("#lynkbox-split-swap").on("click", function () {
+        self.swapPanels();
+      });
+
+      // Fullscreen terminal button
+      $("#lynkbox-split-fullscreen").on("click", function () {
+        self.toggleTerminalFullscreen();
+      });
+
+      // Resizer drag functionality
+      this.initSplitResizer();
+
+      // Escape key to close
+      $(document).on("keydown.lynkbox-split", function (e) {
+        if (e.key === "Escape") {
+          self.closeSplitPane();
+        }
+      });
+    }
+
+    /**
+     * Initialize the split-pane resizer
+     */
+    initSplitResizer() {
+      const self = this;
+      let isResizing = false;
+      let startX = 0;
+      let startWidth = 0;
+
+      const $resizer = $("#lynkbox-split-resizer");
+      const $moodlePanel = $("#lynkbox-moodle-panel");
+      const $terminalPanel = $("#lynkbox-terminal-panel");
+      const $container = $(".lynkbox-split-content");
+
+      $resizer.on("mousedown", function (e) {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = $moodlePanel.width();
+        $("body").addClass("lynkbox-resizing");
+        e.preventDefault();
+      });
+
+      $(document).on("mousemove.lynkbox-resize", function (e) {
+        if (!isResizing) return;
+
+        const containerWidth = $container.width();
+        const diff = e.clientX - startX;
+        const newWidth = ((startWidth + diff) / containerWidth) * 100;
+
+        // Limit between 20% and 80%
+        if (newWidth >= 20 && newWidth <= 80) {
+          $moodlePanel.css("width", newWidth + "%");
+          $terminalPanel.css("width", (100 - newWidth) + "%");
+        }
+      });
+
+      $(document).on("mouseup.lynkbox-resize", function () {
+        if (isResizing) {
+          isResizing = false;
+          $("body").removeClass("lynkbox-resizing");
+        }
+      });
+    }
+
+    /**
+     * Close the split-pane view
+     */
+    closeSplitPane() {
+      // Check if split pane exists
+      if ($("#lynkbox-split-container").length === 0) {
+        return;
+      }
+
+      // Clear the saved state
+      this.clearSplitPaneState();
+
+      // Show original content
+      $(".lynkbox-hidden-original").removeClass("lynkbox-hidden-original");
+
+      // Remove split container
+      $("#lynkbox-split-container").remove();
+
+      // Remove body class
+      $("body").removeClass("lynkbox-split-active");
+
+      // Unbind events
+      $(document).off("keydown.lynkbox-split");
+      $(document).off("mousemove.lynkbox-resize");
+      $(document).off("mouseup.lynkbox-resize");
+    }
+
+    /**
+     * Swap the Moodle and terminal panels
+     */
+    swapPanels() {
+      const $moodlePanel = $("#lynkbox-moodle-panel");
+      const $terminalPanel = $("#lynkbox-terminal-panel");
+      const $resizer = $("#lynkbox-split-resizer");
+
+      // Swap order in DOM
+      if ($moodlePanel.index() < $terminalPanel.index()) {
+        $terminalPanel.insertBefore($moodlePanel);
+        $resizer.insertAfter($terminalPanel);
+      } else {
+        $moodlePanel.insertBefore($terminalPanel);
+        $resizer.insertAfter($moodlePanel);
+      }
+    }
+
+    /**
+     * Toggle terminal fullscreen mode
+     */
+    toggleTerminalFullscreen() {
+      const $container = $("#lynkbox-split-container");
+      const $moodlePanel = $("#lynkbox-moodle-panel");
+      const $resizer = $("#lynkbox-split-resizer");
+      const $btn = $("#lynkbox-split-fullscreen");
+
+      if ($container.hasClass("lynkbox-terminal-fullscreen")) {
+        // Exit fullscreen
+        $container.removeClass("lynkbox-terminal-fullscreen");
+        $moodlePanel.show();
+        $resizer.show();
+        $btn.attr("title", "Fullscreen terminal");
+        $btn.find("svg").html('<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>');
+      } else {
+        // Enter fullscreen
+        $container.addClass("lynkbox-terminal-fullscreen");
+        $moodlePanel.hide();
+        $resizer.hide();
+        $btn.attr("title", "Exit fullscreen");
+        $btn.find("svg").html('<path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>');
+      }
+    }
+
+    /**
+     * Update the timer display in split header
+     */
+    updateSplitTimer() {
+      if (!this.sessionExpiresAt) return;
+
+      const $timer = $("#lynkbox-split-timer");
+      if (!$timer.length) return;
+
+      const now = new Date();
+      const remaining = this.sessionExpiresAt - now;
+
+      if (remaining <= 0) {
+        $timer.text("Expired").addClass("expired");
+        return;
+      }
+
+      const hours = Math.floor(remaining / (1000 * 60 * 60));
+      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+
+      let timeText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      $timer.text(timeText);
+
+      // Update color based on time
+      $timer.removeClass("warning critical");
+      const totalMinutes = remaining / (1000 * 60);
+      if (totalMinutes <= 5) {
+        $timer.addClass("critical");
+      } else if (totalMinutes <= 15) {
+        $timer.addClass("warning");
+      }
     }
 
     /**
@@ -1884,8 +2563,14 @@ define(["jquery", "core/str"], function ($, Str) {
         return;
       }
 
-      // Confirm termination
-      if (!confirm(this.strings.terminateConfirm)) {
+      // Confirm termination with styled modal
+      const confirmed = await this.showConfirm(
+        this.strings.terminateConfirm,
+        "End Session",
+        { confirmText: "End Session", cancelText: "Cancel", type: "warning" }
+      );
+      
+      if (!confirmed) {
         return;
       }
 
@@ -1922,7 +2607,7 @@ define(["jquery", "core/str"], function ($, Str) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.message ||
-              `Failed to terminate session: ${response.status}`
+              `Failed to end session: ${response.status}`
           );
         }
 
@@ -1935,6 +2620,9 @@ define(["jquery", "core/str"], function ($, Str) {
         this.stopSessionTimer();
         this.stopHeartbeat();
 
+        // Close split-pane view if open (returns to normal Moodle view)
+        this.closeSplitPane();
+
         // Update UI
         this.$button.removeClass("attackbox-btn-active");
         this.$button.find(".attackbox-btn-text").text(this.strings.buttonText);
@@ -1944,7 +2632,7 @@ define(["jquery", "core/str"], function ($, Str) {
         this.$terminateButton.css("opacity", "1");
 
         // Show success message
-        alert(this.strings.terminateSuccess);
+        this.showAlert(this.strings.terminateSuccess, "Session Ended", "success");
       } catch (error) {
         console.error("Terminate session error:", error);
 
@@ -1955,7 +2643,7 @@ define(["jquery", "core/str"], function ($, Str) {
           .find(".attackbox-btn-text")
           .text(this.strings.buttonTerminate);
 
-        alert(this.strings.terminateError + ": " + error.message);
+        this.showAlert(this.strings.terminateError + ": " + error.message, "Error", "error");
       }
     }
   }

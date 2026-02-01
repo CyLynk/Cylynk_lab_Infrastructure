@@ -1,0 +1,967 @@
+/**
+ * LynkBox Lab View Styles
+ *
+ * THM/HTB-style split-pane interface with cyberpunk aesthetic.
+ * Designed for full-screen immersive lab experience.
+ *
+ * @package    local_attackbox
+ * @copyright  2025 CyberLab
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+/* ============================================
+   CSS Variables
+   ============================================ */
+:root {
+  --cyberlab-bg-dark: #0d1117;
+  --cyberlab-bg-darker: #010409;
+  --cyberlab-bg-card: #161b22;
+  --cyberlab-bg-elevated: #21262d;
+  --cyberlab-border: #30363d;
+  --cyberlab-border-light: #484f58;
+  --cyberlab-primary: #ff5722;
+  --cyberlab-primary-dark: #e64a19;
+  --cyberlab-primary-light: #ff8a65;
+  --cyberlab-secondary: #ff7043;
+  --cyberlab-accent: #00d4ff;
+  --cyberlab-success: #3fb950;
+  --cyberlab-warning: #d29922;
+  --cyberlab-danger: #f85149;
+  --cyberlab-text: #e6edf3;
+  --cyberlab-text-dim: #8b949e;
+  --cyberlab-text-muted: #6e7681;
+  --cyberlab-font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  --cyberlab-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --cyberlab-header-height: 56px;
+  --cyberlab-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --cyberlab-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --cyberlab-glow: 0 0 20px rgba(255, 87, 34, 0.3);
+}
+
+/* ============================================
+   Reset & Base
+   ============================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--cyberlab-bg-darker);
+}
+
+/* Hide Moodle's default elements in embedded layout */
+#page,
+#page-wrapper,
+.pagelayout-embedded #page {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.pagelayout-embedded #region-main {
+  padding: 0;
+}
+
+/* ============================================
+   Main Container
+   ============================================ */
+.cyberlab-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: var(--cyberlab-bg-dark);
+  font-family: var(--cyberlab-font-sans);
+  color: var(--cyberlab-text);
+  overflow: hidden;
+}
+
+.cyberlab-container.cyberlab-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.cyberlab-container.cyberlab-resizing iframe {
+  pointer-events: none;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.cyberlab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--cyberlab-header-height);
+  padding: 0 16px;
+  background: var(--cyberlab-bg-card);
+  border-bottom: 1px solid var(--cyberlab-border);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.cyberlab-header-left,
+.cyberlab-header-center,
+.cyberlab-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cyberlab-header-left {
+  flex: 1;
+}
+
+.cyberlab-header-right {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Logo/Back Button */
+.cyberlab-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--cyberlab-primary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-logo:hover {
+  background: rgba(255, 87, 34, 0.1);
+  border-color: var(--cyberlab-primary);
+  text-decoration: none;
+  color: var(--cyberlab-primary-light);
+}
+
+.cyberlab-logo svg {
+  width: 20px;
+  height: 20px;
+}
+
+.cyberlab-logo-text {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Course Info */
+.cyberlab-course-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cyberlab-separator {
+  color: var(--cyberlab-border-light);
+}
+
+.cyberlab-course-title {
+  color: var(--cyberlab-text-dim);
+  font-size: 14px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Session Timer */
+.cyberlab-session-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--cyberlab-bg-elevated);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 24px;
+  font-family: var(--cyberlab-font-mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cyberlab-timer-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--cyberlab-success);
+}
+
+.cyberlab-timer-text {
+  color: var(--cyberlab-success);
+  font-variant-numeric: tabular-nums;
+}
+
+.cyberlab-session-timer.warning .cyberlab-timer-icon,
+.cyberlab-session-timer.warning .cyberlab-timer-text {
+  color: var(--cyberlab-warning);
+}
+
+.cyberlab-session-timer.critical .cyberlab-timer-icon,
+.cyberlab-session-timer.critical .cyberlab-timer-text {
+  color: var(--cyberlab-danger);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.cyberlab-session-timer.expired {
+  border-color: var(--cyberlab-danger);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Header Buttons */
+.cyberlab-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--cyberlab-bg-elevated);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 8px;
+  color: var(--cyberlab-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-header-btn:hover {
+  background: var(--cyberlab-border);
+  border-color: var(--cyberlab-border-light);
+}
+
+.cyberlab-header-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cyberlab-header-btn.cyberlab-btn-danger {
+  border-color: var(--cyberlab-danger);
+  color: var(--cyberlab-danger);
+}
+
+.cyberlab-header-btn.cyberlab-btn-danger:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: var(--cyberlab-danger);
+}
+
+/* ============================================
+   Main Layout
+   ============================================ */
+.cyberlab-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Panels */
+.cyberlab-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cyberlab-instructions-panel {
+  width: 35%;
+  min-width: 0;
+  background: var(--cyberlab-bg-card);
+  border-right: 1px solid var(--cyberlab-border);
+  transition: width var(--cyberlab-transition);
+}
+
+.cyberlab-instructions-panel.collapsed {
+  width: 0 !important;
+  min-width: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+.cyberlab-terminal-panel {
+  width: 65%;
+  min-width: 0;
+  background: var(--cyberlab-bg-darker);
+  flex: 1;
+}
+
+/* Panel Header */
+.cyberlab-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--cyberlab-bg-elevated);
+  border-bottom: 1px solid var(--cyberlab-border);
+  flex-shrink: 0;
+}
+
+.cyberlab-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cyberlab-text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cyberlab-panel-title svg {
+  width: 18px;
+  height: 18px;
+  color: var(--cyberlab-primary);
+}
+
+.cyberlab-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 6px;
+  color: var(--cyberlab-text-dim);
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-collapse-btn:hover {
+  background: var(--cyberlab-border);
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-collapse-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Expand Button (when collapsed) */
+.cyberlab-expand-btn {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 48px;
+  background: var(--cyberlab-bg-card);
+  border: 1px solid var(--cyberlab-border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: var(--cyberlab-primary);
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-expand-btn:hover {
+  background: var(--cyberlab-bg-elevated);
+  width: 32px;
+}
+
+.cyberlab-expand-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Resizer */
+.cyberlab-resizer {
+  width: 6px;
+  background: var(--cyberlab-border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background var(--cyberlab-transition);
+}
+
+.cyberlab-resizer:hover,
+.cyberlab-container.cyberlab-resizing .cyberlab-resizer {
+  background: var(--cyberlab-primary);
+}
+
+.cyberlab-resizer-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 32px;
+  background: var(--cyberlab-border-light);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity var(--cyberlab-transition);
+}
+
+.cyberlab-resizer:hover .cyberlab-resizer-handle {
+  opacity: 1;
+}
+
+/* ============================================
+   Panel Content
+   ============================================ */
+.cyberlab-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Tabs */
+.cyberlab-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--cyberlab-bg-dark);
+  border-bottom: 1px solid var(--cyberlab-border);
+}
+
+.cyberlab-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--cyberlab-text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-tab:hover {
+  color: var(--cyberlab-text);
+  background: var(--cyberlab-bg-elevated);
+}
+
+.cyberlab-tab.active {
+  color: var(--cyberlab-primary);
+  background: rgba(255, 87, 34, 0.1);
+  border-color: var(--cyberlab-primary);
+}
+
+.cyberlab-tab svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Tab Content */
+.cyberlab-tab-content {
+  display: none;
+  padding: 16px;
+}
+
+.cyberlab-tab-content.active {
+  display: block;
+}
+
+/* ============================================
+   Instructions Content
+   ============================================ */
+.cyberlab-instructions-content {
+  line-height: 1.6;
+}
+
+.cyberlab-welcome {
+  text-align: center;
+  padding: 24px;
+}
+
+.cyberlab-welcome-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  color: var(--cyberlab-primary);
+}
+
+.cyberlab-welcome-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cyberlab-welcome h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-welcome p {
+  margin: 0 0 16px;
+  color: var(--cyberlab-text-dim);
+  font-size: 14px;
+}
+
+.cyberlab-welcome ul {
+  text-align: left;
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: var(--cyberlab-text-dim);
+  font-size: 13px;
+}
+
+.cyberlab-welcome ul li {
+  margin-bottom: 8px;
+}
+
+.cyberlab-welcome ul strong {
+  color: var(--cyberlab-primary);
+}
+
+.cyberlab-tip {
+  padding: 12px 16px;
+  background: rgba(255, 87, 34, 0.1);
+  border: 1px solid rgba(255, 87, 34, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--cyberlab-text);
+  text-align: left;
+}
+
+.cyberlab-tip strong {
+  color: var(--cyberlab-primary);
+}
+
+/* Loading State */
+.cyberlab-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: var(--cyberlab-text-dim);
+}
+
+.cyberlab-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--cyberlab-border);
+  border-top-color: var(--cyberlab-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   Quick Tools
+   ============================================ */
+.cyberlab-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.cyberlab-tool-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--cyberlab-bg-dark);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-tool-card:hover {
+  border-color: var(--cyberlab-primary);
+  background: rgba(255, 87, 34, 0.05);
+  transform: translateY(-2px);
+}
+
+.cyberlab-tool-card.copied {
+  border-color: var(--cyberlab-success);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.cyberlab-tool-card.copied::after {
+  content: "Copied!";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 4px 12px;
+  background: var(--cyberlab-success);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.cyberlab-tool-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.cyberlab-tool-info h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-tool-info p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--cyberlab-text-dim);
+}
+
+.cyberlab-tools-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--cyberlab-bg-dark);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--cyberlab-text-dim);
+}
+
+.cyberlab-tools-tip svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--cyberlab-accent);
+}
+
+.cyberlab-tools-tip code {
+  padding: 2px 6px;
+  background: var(--cyberlab-bg-elevated);
+  border-radius: 4px;
+  font-family: var(--cyberlab-font-mono);
+  font-size: 11px;
+  color: var(--cyberlab-primary);
+}
+
+/* ============================================
+   Notes
+   ============================================ */
+.cyberlab-notes-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--cyberlab-header-height) - 120px);
+}
+
+.cyberlab-notes-textarea {
+  flex: 1;
+  width: 100%;
+  padding: 16px;
+  background: var(--cyberlab-bg-dark);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 8px;
+  color: var(--cyberlab-text);
+  font-family: var(--cyberlab-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  transition: border-color var(--cyberlab-transition);
+}
+
+.cyberlab-notes-textarea:focus {
+  outline: none;
+  border-color: var(--cyberlab-primary);
+}
+
+.cyberlab-notes-textarea::placeholder {
+  color: var(--cyberlab-text-muted);
+}
+
+.cyberlab-notes-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.cyberlab-notes-status {
+  flex: 1;
+  font-size: 12px;
+  color: var(--cyberlab-text-muted);
+}
+
+.cyberlab-notes-status.saved {
+  color: var(--cyberlab-success);
+}
+
+.cyberlab-notes-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--cyberlab-bg-elevated);
+  border: 1px solid var(--cyberlab-border);
+  border-radius: 6px;
+  color: var(--cyberlab-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-notes-btn:hover {
+  background: var(--cyberlab-border);
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-notes-btn.success {
+  border-color: var(--cyberlab-success);
+  color: var(--cyberlab-success);
+}
+
+.cyberlab-notes-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cyberlab-notes-btn-danger:hover {
+  border-color: var(--cyberlab-danger);
+  color: var(--cyberlab-danger);
+}
+
+/* ============================================
+   Terminal / Guacamole Frame
+   ============================================ */
+.cyberlab-terminal-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.cyberlab-guacamole-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+}
+
+/* Connection Status Overlay */
+.cyberlab-connection-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10;
+}
+
+.cyberlab-connection-content {
+  text-align: center;
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-connection-content .cyberlab-spinner {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+}
+
+.cyberlab-connection-content p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cyberlab-text-dim);
+}
+
+/* ============================================
+   Course Content Placeholder
+   ============================================ */
+.cyberlab-course-placeholder {
+  text-align: center;
+  padding: 24px;
+}
+
+.cyberlab-course-placeholder h3 {
+  margin: 0 0 12px;
+  color: var(--cyberlab-text);
+}
+
+.cyberlab-course-placeholder p {
+  margin: 0 0 20px;
+  color: var(--cyberlab-text-dim);
+  font-size: 14px;
+}
+
+.cyberlab-course-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--cyberlab-primary);
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all var(--cyberlab-transition);
+}
+
+.cyberlab-course-link:hover {
+  background: var(--cyberlab-primary-light);
+  text-decoration: none;
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+@media (max-width: 1024px) {
+  .cyberlab-instructions-panel {
+    width: 40%;
+  }
+
+  .cyberlab-terminal-panel {
+    width: 60%;
+  }
+
+  .cyberlab-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cyberlab-course-title {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cyberlab-header {
+    padding: 0 12px;
+  }
+
+  .cyberlab-logo-text {
+    display: none;
+  }
+
+  .cyberlab-course-info {
+    display: none;
+  }
+
+  .cyberlab-header-btn span {
+    display: none;
+  }
+
+  .cyberlab-instructions-panel {
+    position: absolute;
+    left: 0;
+    top: var(--cyberlab-header-height);
+    bottom: 0;
+    width: 100% !important;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform var(--cyberlab-transition);
+  }
+
+  .cyberlab-instructions-panel:not(.collapsed) {
+    transform: translateX(0);
+  }
+
+  .cyberlab-terminal-panel {
+    width: 100% !important;
+  }
+
+  .cyberlab-resizer {
+    display: none;
+  }
+
+  .cyberlab-expand-btn {
+    display: flex;
+    left: 0;
+    top: auto;
+    bottom: 80px;
+    transform: none;
+    height: 56px;
+    width: 32px;
+  }
+
+  .cyberlab-instructions-panel:not(.collapsed) ~ .cyberlab-expand-btn {
+    display: none;
+  }
+}
+
+/* ============================================
+   Fullscreen Mode
+   ============================================ */
+.cyberlab-container:fullscreen {
+  background: var(--cyberlab-bg-darker);
+}
+
+.cyberlab-container:fullscreen .cyberlab-header {
+  background: rgba(22, 27, 34, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+.cyberlab-panel-content::-webkit-scrollbar,
+.cyberlab-notes-textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cyberlab-panel-content::-webkit-scrollbar-track,
+.cyberlab-notes-textarea::-webkit-scrollbar-track {
+  background: var(--cyberlab-bg-dark);
+}
+
+.cyberlab-panel-content::-webkit-scrollbar-thumb,
+.cyberlab-notes-textarea::-webkit-scrollbar-thumb {
+  background: var(--cyberlab-border);
+  border-radius: 4px;
+}
+
+.cyberlab-panel-content::-webkit-scrollbar-thumb:hover,
+.cyberlab-notes-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--cyberlab-border-light);
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   Print (Hide Everything)
+   ============================================ */
+@media print {
+  .cyberlab-container {
+    display: none !important;
+  }
+}
