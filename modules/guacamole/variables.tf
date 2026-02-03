@@ -23,11 +23,6 @@ variable "ami_id" {
 variable "instance_type" {
   description = "EC2 instance type for Guacamole"
   type        = string
-  default     = "t3.small"
-  validation {
-    condition     = can(regex("^t[2-3]\\.(micro|small|medium|large)", var.instance_type))
-    error_message = "Instance type must be a valid t2 or t3 instance (e.g., t3.small)."
-  }
 }
 
 variable "subnet_id" {
