@@ -154,7 +154,15 @@ define(["jquery", "core/str"], function ($, Str) {
     init() {
       // Check if we're running inside an embedded iframe (split-pane left panel)
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get("lynkbox_embedded") === "1") {
+      const isEmbedded = urlParams.get("lynkbox_embedded") === "1";
+
+      // Also check if we're inside an iframe
+      const isInIframe = window.self !== window.top;
+
+      if (
+        isEmbedded ||
+        (isInIframe && window.name === "lynkbox-moodle-frame")
+      ) {
         console.log("[LynkBox] Running in embedded mode - launcher disabled");
         // Don't show launcher in embedded mode, but keep the page functional
         return;
@@ -245,7 +253,7 @@ define(["jquery", "core/str"], function ($, Str) {
       this.$idleWarning = $("#attackbox-idle-warning");
       this.$idleCountdown = $("#attackbox-idle-countdown-time");
       this.$idleMessage = $("#attackbox-idle-warning-message");
-      
+
       // Bind close button
       $("#attackbox-idle-close").on("click", () => this.hideIdleWarning());
     }
@@ -837,24 +845,26 @@ define(["jquery", "core/str"], function ($, Str) {
       return new Promise((resolve) => {
         this.$modalTitle.text(title);
         this.$modalMessage.html(message);
-        
+
         // Set icon based on type
         this.setModalIcon(type);
-        
+
         // Show only OK button for alerts
         this.$modalFooter.html(`
           <button id="lynkbox-modal-ok" class="lynkbox-modal-btn lynkbox-modal-btn-primary">OK</button>
         `);
-        
+
         // Bind OK button
-        $("#lynkbox-modal-ok").off("click").on("click", () => {
-          this.$modal.fadeOut(200);
-          resolve();
-        });
-        
+        $("#lynkbox-modal-ok")
+          .off("click")
+          .on("click", () => {
+            this.$modal.fadeOut(200);
+            resolve();
+          });
+
         // Show modal
         this.$modal.fadeIn(200);
-        
+
         // Focus OK button
         setTimeout(() => $("#lynkbox-modal-ok").focus(), 100);
       });
@@ -872,33 +882,37 @@ define(["jquery", "core/str"], function ($, Str) {
         const confirmText = options.confirmText || "Yes";
         const cancelText = options.cancelText || "Cancel";
         const type = options.type || "warning";
-        
+
         this.$modalTitle.text(title);
         this.$modalMessage.html(message);
-        
+
         // Set icon based on type
         this.setModalIcon(type);
-        
+
         // Show confirm/cancel buttons
         this.$modalFooter.html(`
           <button id="lynkbox-modal-cancel" class="lynkbox-modal-btn lynkbox-modal-btn-secondary">${cancelText}</button>
           <button id="lynkbox-modal-confirm" class="lynkbox-modal-btn lynkbox-modal-btn-primary">${confirmText}</button>
         `);
-        
+
         // Bind buttons
-        $("#lynkbox-modal-cancel").off("click").on("click", () => {
-          this.$modal.fadeOut(200);
-          resolve(false);
-        });
-        
-        $("#lynkbox-modal-confirm").off("click").on("click", () => {
-          this.$modal.fadeOut(200);
-          resolve(true);
-        });
-        
+        $("#lynkbox-modal-cancel")
+          .off("click")
+          .on("click", () => {
+            this.$modal.fadeOut(200);
+            resolve(false);
+          });
+
+        $("#lynkbox-modal-confirm")
+          .off("click")
+          .on("click", () => {
+            this.$modal.fadeOut(200);
+            resolve(true);
+          });
+
         // Show modal
         this.$modal.fadeIn(200);
-        
+
         // Focus confirm button
         setTimeout(() => $("#lynkbox-modal-confirm").focus(), 100);
       });
@@ -928,11 +942,14 @@ define(["jquery", "core/str"], function ($, Str) {
                  <circle cx="12" cy="12" r="10"/>
                  <line x1="15" y1="9" x2="9" y2="15"/>
                  <line x1="9" y1="9" x2="15" y2="15"/>
-               </svg>`
+               </svg>`,
       };
-      
+
       this.$modalIcon.html(icons[type] || icons.info);
-      this.$modal.find(".lynkbox-modal").removeClass("modal-info modal-success modal-warning modal-error").addClass(`modal-${type}`);
+      this.$modal
+        .find(".lynkbox-modal")
+        .removeClass("modal-info modal-success modal-warning modal-error")
+        .addClass(`modal-${type}`);
     }
 
     /**
@@ -1609,7 +1626,7 @@ define(["jquery", "core/str"], function ($, Str) {
       // Use direct DOM query to ensure elements are found
       const $fill = $("#attackbox-progress-fill");
       const $percent = $("#attackbox-progress-percent");
-      
+
       if ($fill.length) {
         $fill.css("width", percent + "%");
       }
@@ -2085,7 +2102,11 @@ define(["jquery", "core/str"], function ($, Str) {
           this.$terminateButton.hide();
           // Close split pane if open
           this.closeSplitPane();
-          this.showAlert("Your session has expired. Please launch a new session.", "Session Expired", "warning");
+          this.showAlert(
+            "Your session has expired. Please launch a new session.",
+            "Session Expired",
+            "warning"
+          );
         }, 2000);
         return;
       }
@@ -2130,11 +2151,13 @@ define(["jquery", "core/str"], function ($, Str) {
       console.log("[LynkBox] openLabView called", {
         activeSessionUrl: this.activeSessionUrl,
         sessionId: this.sessionId,
-        openInNewTab: this.config.openInNewTab
+        openInNewTab: this.config.openInNewTab,
       });
 
       if (!this.activeSessionUrl || !this.sessionId) {
-        console.error("[LynkBox] Cannot open lab view: missing session URL or ID");
+        console.error(
+          "[LynkBox] Cannot open lab view: missing session URL or ID"
+        );
         return;
       }
 
@@ -2169,11 +2192,14 @@ define(["jquery", "core/str"], function ($, Str) {
      */
     injectSplitPane() {
       const self = this;
-      console.log("[LynkBox] injectSplitPane called with URL:", this.activeSessionUrl);
+      console.log(
+        "[LynkBox] injectSplitPane called with URL:",
+        this.activeSessionUrl
+      );
 
       // Get current page URL for the Moodle iframe
       const currentUrl = window.location.href;
-      
+
       // Add a parameter to prevent infinite split-pane loops
       const moodleUrl = new URL(currentUrl);
       moodleUrl.searchParams.set("lynkbox_embedded", "1");
@@ -2235,6 +2261,7 @@ define(["jquery", "core/str"], function ($, Str) {
             <div class="lynkbox-split-panel lynkbox-moodle-panel" id="lynkbox-moodle-panel">
               <iframe 
                 id="lynkbox-moodle-frame"
+                name="lynkbox-moodle-frame"
                 class="lynkbox-moodle-frame"
                 src="${moodleUrl.toString()}"
                 allow="fullscreen">
@@ -2250,10 +2277,12 @@ define(["jquery", "core/str"], function ($, Str) {
             <div class="lynkbox-split-panel lynkbox-terminal-panel" id="lynkbox-terminal-panel">
               <iframe 
                 id="lynkbox-guacamole-frame"
+                name="lynkbox-guacamole-frame"
                 class="lynkbox-guacamole-frame"
                 src="${this.activeSessionUrl}"
-                allow="clipboard-read; clipboard-write; fullscreen"
-                allowfullscreen>
+                allow="clipboard-read; clipboard-write; fullscreen; keyboard-map"
+                allowfullscreen
+                tabindex="0">
               </iframe>
             </div>
           </div>
@@ -2264,7 +2293,12 @@ define(["jquery", "core/str"], function ($, Str) {
       $("body").append(splitPaneHtml);
 
       // Hide the original page content
-      $("body").children().not("#lynkbox-split-container, .attackbox-launcher, .attackbox-overlay, .attackbox-quota-notification, .attackbox-idle-warning, .lynkbox-modal-overlay, .attackbox-btn-restore, script, style, link, noscript").addClass("lynkbox-hidden-original");
+      $("body")
+        .children()
+        .not(
+          "#lynkbox-split-container, .attackbox-launcher, .attackbox-overlay, .attackbox-quota-notification, .attackbox-idle-warning, .lynkbox-modal-overlay, .attackbox-btn-restore, script, style, link, noscript"
+        )
+        .addClass("lynkbox-hidden-original");
 
       // Add body class to prevent scrolling on main page
       $("body").addClass("lynkbox-split-active");
@@ -2278,7 +2312,10 @@ define(["jquery", "core/str"], function ($, Str) {
       // Update timer display in split header
       this.updateSplitTimer();
 
-      console.log("[LynkBox] Split-pane injection complete. Container exists:", $("#lynkbox-split-container").length > 0);
+      console.log(
+        "[LynkBox] Split-pane injection complete. Container exists:",
+        $("#lynkbox-split-container").length > 0
+      );
     }
 
     /**
@@ -2289,7 +2326,9 @@ define(["jquery", "core/str"], function ($, Str) {
         active: true,
         sessionId: this.sessionId,
         guacamoleUrl: this.activeSessionUrl,
-        expiresAt: this.sessionExpiresAt ? this.sessionExpiresAt.toISOString() : null
+        expiresAt: this.sessionExpiresAt
+          ? this.sessionExpiresAt.toISOString()
+          : null,
       };
       sessionStorage.setItem("lynkbox-split-state", JSON.stringify(state));
       console.log("[LynkBox] Split-pane state saved:", state);
@@ -2309,8 +2348,16 @@ define(["jquery", "core/str"], function ($, Str) {
     checkAndRestoreSplitPane() {
       // Don't restore if we're already in an embedded iframe
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get("lynkbox_embedded") === "1") {
-        console.log("[LynkBox] Running in embedded mode, skipping split-pane restore");
+      const isEmbedded = urlParams.get("lynkbox_embedded") === "1";
+      const isInIframe = window.self !== window.top;
+
+      if (
+        isEmbedded ||
+        (isInIframe && window.name === "lynkbox-moodle-frame")
+      ) {
+        console.log(
+          "[LynkBox] Running in embedded mode, skipping split-pane restore"
+        );
         return;
       }
 
@@ -2328,7 +2375,9 @@ define(["jquery", "core/str"], function ($, Str) {
           if (state.expiresAt) {
             const expiresAt = new Date(state.expiresAt);
             if (expiresAt <= new Date()) {
-              console.log("[LynkBox] Saved session has expired, clearing state");
+              console.log(
+                "[LynkBox] Saved session has expired, clearing state"
+              );
               this.clearSplitPaneState();
               return;
             }
@@ -2342,7 +2391,9 @@ define(["jquery", "core/str"], function ($, Str) {
 
           // Update button state
           this.$button.addClass("attackbox-btn-active");
-          this.$button.find(".attackbox-btn-text").text(this.strings.buttonTextActive);
+          this.$button
+            .find(".attackbox-btn-text")
+            .text(this.strings.buttonTextActive);
           this.$button.attr("title", this.strings.buttonTooltipActive);
           this.$terminateButton.show();
 
@@ -2369,6 +2420,45 @@ define(["jquery", "core/str"], function ($, Str) {
      */
     bindSplitPaneEvents() {
       const self = this;
+
+      // Focus Guacamole iframe when terminal panel is clicked
+      // This ensures keyboard input goes to the terminal
+      const focusGuacamole = function () {
+        const guacFrame = document.getElementById("lynkbox-guacamole-frame");
+        if (guacFrame) {
+          // Use setTimeout to ensure focus happens after any other events
+          setTimeout(function () {
+            guacFrame.focus();
+            // Also try to focus the content window
+            try {
+              guacFrame.contentWindow.focus();
+            } catch (e) {
+              // Cross-origin - can't focus content window directly
+            }
+          }, 50);
+        }
+      };
+
+      // Multiple event handlers to catch focus on terminal panel
+      $("#lynkbox-terminal-panel").on("click mousedown", focusGuacamole);
+
+      // When iframe itself is clicked
+      $("#lynkbox-guacamole-frame").on("load", function () {
+        // Focus on initial load
+        focusGuacamole();
+
+        // Also add mouseenter handler for re-focusing
+        $(this).on("mouseenter", focusGuacamole);
+      });
+
+      // Re-focus when mouse enters terminal panel after being in Moodle
+      $("#lynkbox-terminal-panel").on("mouseenter", function (e) {
+        // Check if coming from outside the terminal panel
+        const $related = $(e.relatedTarget);
+        if (!$related.closest("#lynkbox-terminal-panel").length) {
+          focusGuacamole();
+        }
+      });
 
       // Minimize button - close split view but keep session running
       $("#lynkbox-split-close").on("click", function () {
@@ -2438,7 +2528,7 @@ define(["jquery", "core/str"], function ($, Str) {
         // Limit between 20% and 80%
         if (newWidth >= 20 && newWidth <= 80) {
           $moodlePanel.css("width", newWidth + "%");
-          $terminalPanel.css("width", (100 - newWidth) + "%");
+          $terminalPanel.css("width", 100 - newWidth + "%");
         }
       });
 
@@ -2510,14 +2600,22 @@ define(["jquery", "core/str"], function ($, Str) {
         $moodlePanel.show();
         $resizer.show();
         $btn.attr("title", "Fullscreen terminal");
-        $btn.find("svg").html('<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>');
+        $btn
+          .find("svg")
+          .html(
+            '<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>'
+          );
       } else {
         // Enter fullscreen
         $container.addClass("lynkbox-terminal-fullscreen");
         $moodlePanel.hide();
         $resizer.hide();
         $btn.attr("title", "Exit fullscreen");
-        $btn.find("svg").html('<path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>');
+        $btn
+          .find("svg")
+          .html(
+            '<path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>'
+          );
       }
     }
 
@@ -2569,7 +2667,7 @@ define(["jquery", "core/str"], function ($, Str) {
         "End Session",
         { confirmText: "End Session", cancelText: "Cancel", type: "warning" }
       );
-      
+
       if (!confirmed) {
         return;
       }
@@ -2606,8 +2704,7 @@ define(["jquery", "core/str"], function ($, Str) {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message ||
-              `Failed to end session: ${response.status}`
+            errorData.message || `Failed to end session: ${response.status}`
           );
         }
 
@@ -2632,7 +2729,11 @@ define(["jquery", "core/str"], function ($, Str) {
         this.$terminateButton.css("opacity", "1");
 
         // Show success message
-        this.showAlert(this.strings.terminateSuccess, "Session Ended", "success");
+        this.showAlert(
+          this.strings.terminateSuccess,
+          "Session Ended",
+          "success"
+        );
       } catch (error) {
         console.error("Terminate session error:", error);
 
@@ -2643,7 +2744,11 @@ define(["jquery", "core/str"], function ($, Str) {
           .find(".attackbox-btn-text")
           .text(this.strings.buttonTerminate);
 
-        this.showAlert(this.strings.terminateError + ": " + error.message, "Error", "error");
+        this.showAlert(
+          this.strings.terminateError + ": " + error.message,
+          "Error",
+          "error"
+        );
       }
     }
   }
