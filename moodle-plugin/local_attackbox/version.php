@@ -24,9 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026020110;        // The current plugin version (Date: YYYYMMDDXX).
+$plugin->version = 2026020112;        // The current plugin version (Date: YYYYMMDDXX).
 $plugin->requires = 2024042200;        // Requires Moodle 4.4.
 $plugin->component = 'local_attackbox'; // Full name of the plugin.
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.8.4';            // Fix: Improved terminal focus when switching between panels.
+$plugin->release = '1.8.6';            // UI: Prominent centered idle warning, requires button click to dismiss.
 
