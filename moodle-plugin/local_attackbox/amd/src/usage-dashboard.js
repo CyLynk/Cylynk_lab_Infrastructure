@@ -58,7 +58,7 @@ define(["jquery"], function ($) {
             headers: {
               Accept: "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -93,7 +93,7 @@ define(["jquery"], function ($) {
             headers: {
               Accept: "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -124,8 +124,8 @@ define(["jquery"], function ($) {
         percentageUsed >= 90
           ? "#f44336"
           : percentageUsed >= 70
-          ? "#ffc107"
-          : "#4caf50";
+            ? "#ffc107"
+            : "#4caf50";
 
       const html = `
                 <div class="quota-cards">
@@ -138,7 +138,7 @@ define(["jquery"], function ($) {
                         <div class="quota-value">${data.hours_used}h</div>
                         <div class="quota-sublabel">of ${
                           data.hours_limit === "Unlimited"
-                            ? "∞"
+                            ? "Unlimited"
                             : data.hours_limit + "h"
                         }</div>
                     </div>
@@ -146,7 +146,7 @@ define(["jquery"], function ($) {
                         <div class="quota-label">Remaining</div>
                         <div class="quota-value">${
                           data.hours_remaining === "Unlimited"
-                            ? "∞"
+                            ? "Unlimited"
                             : data.hours_remaining + "h"
                         }</div>
                     </div>
@@ -215,8 +215,8 @@ define(["jquery"], function ($) {
           session.status === "terminated"
             ? "status-ended"
             : session.status === "ready" || session.status === "active"
-            ? "status-active"
-            : "status-other";
+              ? "status-active"
+              : "status-other";
 
         // Use created_at instead of started_at
         const startTime = session.created_at || session.started_at;
@@ -228,7 +228,7 @@ define(["jquery"], function ($) {
         html += `
                     <tr>
                         <td class="session-id">${this.truncateId(
-                          session.session_id
+                          session.session_id,
                         )}</td>
                         <td>${this.formatDateTime(startTime)}</td>
                         <td>${
@@ -238,8 +238,8 @@ define(["jquery"], function ($) {
                         }</td>
                         <td>${session.duration_display || "N/A"}</td>
                         <td><span class="status-badge ${statusClass}">${this.capitalizeFirst(
-          session.status
-        )}</span></td>
+                          session.status,
+                        )}</span></td>
                     </tr>
                 `;
       });

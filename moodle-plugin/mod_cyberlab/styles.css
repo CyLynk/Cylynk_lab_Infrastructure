@@ -1,0 +1,190 @@
+/* CyberLab Activity Module Styles */
+
+/* Difficulty badges */
+.badge-beginner {
+  background-color: #28a745;
+  color: white;
+}
+
+.badge-intermediate {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.badge-advanced {
+  background-color: #fd7e14;
+  color: white;
+}
+
+.badge-expert {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* Lab header */
+.cyberlab-header {
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 1rem;
+}
+
+.cyberlab-header h2 {
+  margin-bottom: 0.5rem;
+}
+
+/* Connection methods */
+.connection-method {
+  padding: 0.5rem;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+.connection-method .fa {
+  width: 20px;
+  text-align: center;
+  color: #6c757d;
+}
+
+/* Lab launcher panel */
+.cyberlab-launcher {
+  border: 2px solid #007bff;
+}
+
+.cyberlab-launcher .card-header {
+  border-bottom: 2px solid #007bff;
+}
+
+/* Target info display */
+.target-info {
+  font-size: 1.1rem;
+}
+
+.target-info .target-ip {
+  margin-top: 0.5rem;
+}
+
+.target-info code {
+  font-size: 1.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #e9ecef;
+  border-radius: 4px;
+}
+
+/* Launch progress */
+.launch-progress {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.launch-progress .spinner-border {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Action buttons */
+.cyberlab-actions .btn {
+  min-width: 150px;
+}
+
+/* Session history */
+.cyberlab-history table {
+  margin-bottom: 0;
+}
+
+/* Hints section */
+.cyberlab-hints .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Flag info */
+.cyberlab-flag-info code {
+  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Objectives */
+.cyberlab-objectives .card-body p {
+  white-space: pre-line;
+  margin-bottom: 0;
+}
+
+/* Index page */
+.mod_index .badge {
+  font-size: 0.85rem;
+  padding: 0.35em 0.65em;
+}
+
+/* Form improvements */
+.mform .fitem_fcheckbox {
+  padding: 0.5rem 0;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .cyberlab-actions .btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+
+  .cyberlab-actions .btn:last-child {
+    margin-bottom: 0;
+  }
+
+  .target-info code {
+    font-size: 1.2rem;
+  }
+
+  .cyberlab-header .badge {
+    display: block;
+    margin-top: 0.5rem;
+  }
+}
+
+/* Status colors */
+.text-running {
+  color: #28a745;
+}
+
+.text-launching {
+  color: #007bff;
+}
+
+.text-terminated {
+  color: #6c757d;
+}
+
+.text-error {
+  color: #dc3545;
+}
+
+/* Card enhancements */
+.cyberlab-launcher .card-body {
+  padding: 1.5rem;
+}
+
+.cyberlab-objectives,
+.cyberlab-connections,
+.cyberlab-hints,
+.cyberlab-history {
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Pulse animation for launching state */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.session-launching {
+  animation: pulse 2s ease-in-out infinite;
+}

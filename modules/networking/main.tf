@@ -89,6 +89,23 @@ resource "aws_subnet" "student_labs" {
 
 }
 
+# Lab Targets Subnet - For VM-based lab target machines
+resource "aws_subnet" "lab_targets" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.lab_targets_cidr
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = false
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.project_name}-${var.environment}-lab-targets-subnet"
+      Type = "LabTargets"
+      Tier = "Private"
+    }
+  )
+}
+
 # Elastic IP for NAT Gateway
 resource "aws_eip" "nat" {
   count  = var.enable_nat_gateway ? 1 : 0
@@ -176,6 +193,12 @@ resource "aws_route_table_association" "attackbox_pool" {
 resource "aws_route_table_association" "student_labs" {
   count          = var.student_lab_subnet_count
   subnet_id      = aws_subnet.student_labs[count.index].id
+  route_table_id = aws_route_table.private.id
+}
+
+# Route Table Association - Lab Targets Subnet
+resource "aws_route_table_association" "lab_targets" {
+  subnet_id      = aws_subnet.lab_targets.id
   route_table_id = aws_route_table.private.id
 }
 

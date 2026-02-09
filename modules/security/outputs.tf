@@ -54,3 +54,9 @@ output "lambda_security_group_id" {
   description = "ID of Lambda security group"
   value       = aws_security_group.lambda.id
 }
+
+# Alias for lab targets (same as lab_vms)
+output "lab_targets_security_group_id" {
+  description = "ID of Lab Targets security group (alias for lab_vms)"
+  value       = aws_security_group.lab_targets.id
+}

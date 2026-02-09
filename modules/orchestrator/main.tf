@@ -167,6 +167,116 @@ resource "aws_dynamodb_table" "usage" {
 }
 
 # =============================================================================
+# Lab Management DynamoDB Tables
+# =============================================================================
+
+# Lab templates table - stores available lab configurations (admin-defined)
+resource "aws_dynamodb_table" "lab_templates" {
+  name         = "${var.project_name}-${var.environment}-lab-templates"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "template_id"
+
+  attribute {
+    name = "template_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "lab_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "active"
+    type = "N"
+  }
+
+  global_secondary_index {
+    name            = "ByTypeIndex"
+    hash_key        = "lab_type"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "ActiveIndex"
+    hash_key        = "active"
+    projection_type = "ALL"
+  }
+
+  point_in_time_recovery {
+    enabled = var.environment == "production"
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-${var.environment}-lab-templates"
+    }
+  )
+}
+
+# Lab sessions table - tracks active lab instances per user
+resource "aws_dynamodb_table" "lab_sessions" {
+  name         = "${var.project_name}-${var.environment}-lab-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "session_id"
+
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "instance_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "UserIndex"
+    hash_key        = "user_id"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "StatusIndex"
+    hash_key        = "status"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "InstanceIndex"
+    hash_key        = "instance_id"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = var.environment == "production"
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-${var.environment}-lab-sessions"
+    }
+  )
+}
+
+# =============================================================================
 # IAM Role for Lambda Functions
 # =============================================================================
 
@@ -226,7 +336,11 @@ resource "aws_iam_role_policy" "orchestrator_policy" {
           aws_dynamodb_table.instance_pool.arn,
           "${aws_dynamodb_table.instance_pool.arn}/index/*",
           aws_dynamodb_table.usage.arn,
-          "${aws_dynamodb_table.usage.arn}/index/*"
+          "${aws_dynamodb_table.usage.arn}/index/*",
+          aws_dynamodb_table.lab_templates.arn,
+          "${aws_dynamodb_table.lab_templates.arn}/index/*",
+          aws_dynamodb_table.lab_sessions.arn,
+          "${aws_dynamodb_table.lab_sessions.arn}/index/*"
         ]
       },
       {
@@ -251,6 +365,55 @@ resource "aws_iam_role_policy" "orchestrator_policy" {
         Condition = {
           StringEquals = {
             "ec2:ResourceTag/Role" = "AttackBox"
+          }
+        }
+      },
+      {
+        Sid    = "EC2LabInstanceManagement"
+        Effect = "Allow"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateTags"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "ec2:ResourceTag/Role" = "LabTarget"
+          }
+        }
+      },
+      {
+        Sid    = "EC2RunInstancesForLabs"
+        Effect = "Allow"
+        Action = [
+          "ec2:RunInstances"
+        ]
+        Resource = [
+          "arn:aws:ec2:*:*:instance/*",
+          "arn:aws:ec2:*:*:volume/*",
+          "arn:aws:ec2:*:*:network-interface/*",
+          "arn:aws:ec2:*:*:security-group/*",
+          "arn:aws:ec2:*:*:subnet/*",
+          "arn:aws:ec2:*::image/*"
+        ]
+      },
+      {
+        Sid    = "EC2CreateTagsForNewInstances"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags"
+        ]
+        Resource = [
+          "arn:aws:ec2:*:*:instance/*",
+          "arn:aws:ec2:*:*:volume/*",
+          "arn:aws:ec2:*:*:network-interface/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ec2:CreateAction" = "RunInstances"
           }
         }
       },
@@ -1112,3 +1275,318 @@ resource "aws_ssm_parameter" "moodle_secret" {
   tags = local.common_tags
 }
 
+# =============================================================================
+# Lab Management Lambda Functions and API Routes
+# =============================================================================
+
+# CloudWatch Log Groups for Lab Functions
+resource "aws_cloudwatch_log_group" "create_lab_session" {
+  name              = "/aws/lambda/${local.function_name_prefix}-create-lab-session"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "get_lab_status" {
+  name              = "/aws/lambda/${local.function_name_prefix}-get-lab-status"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "terminate_lab_session" {
+  name              = "/aws/lambda/${local.function_name_prefix}-terminate-lab-session"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "list_lab_templates" {
+  name              = "/aws/lambda/${local.function_name_prefix}-list-lab-templates"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
+# Create Lab Session Lambda
+resource "aws_lambda_function" "create_lab_session" {
+  filename         = "${path.module}/lambda/packages/create-lab-session.zip"
+  function_name    = "${local.function_name_prefix}-create-lab-session"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/create-lab-session.zip") ? filebase64sha256("${path.module}/lambda/packages/create-lab-session.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      LAB_TEMPLATES_TABLE   = aws_dynamodb_table.lab_templates.name
+      LAB_SESSIONS_TABLE    = aws_dynamodb_table.lab_sessions.name
+      LAB_TARGETS_SUBNET_ID = var.lab_targets_subnet_id
+      LAB_TARGETS_SG_ID     = var.lab_security_group_id
+      MOODLE_WEBHOOK_SECRET = var.moodle_webhook_secret
+      REQUIRE_MOODLE_AUTH   = tostring(var.require_moodle_auth)
+      ENVIRONMENT           = var.environment
+      PROJECT_NAME          = var.project_name
+      AWS_REGION_NAME       = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.create_lab_session]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-create-lab-session"
+    }
+  )
+}
+
+# Get Lab Status Lambda
+resource "aws_lambda_function" "get_lab_status" {
+  filename         = "${path.module}/lambda/packages/get-lab-status.zip"
+  function_name    = "${local.function_name_prefix}-get-lab-status"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/get-lab-status.zip") ? filebase64sha256("${path.module}/lambda/packages/get-lab-status.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      LAB_SESSIONS_TABLE    = aws_dynamodb_table.lab_sessions.name
+      MOODLE_WEBHOOK_SECRET = var.moodle_webhook_secret
+      REQUIRE_MOODLE_AUTH   = tostring(var.require_moodle_auth)
+      ENVIRONMENT           = var.environment
+      PROJECT_NAME          = var.project_name
+      AWS_REGION_NAME       = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.get_lab_status]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-get-lab-status"
+    }
+  )
+}
+
+# Terminate Lab Session Lambda
+resource "aws_lambda_function" "terminate_lab_session" {
+  filename         = "${path.module}/lambda/packages/terminate-lab-session.zip"
+  function_name    = "${local.function_name_prefix}-terminate-lab-session"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/terminate-lab-session.zip") ? filebase64sha256("${path.module}/lambda/packages/terminate-lab-session.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      LAB_SESSIONS_TABLE    = aws_dynamodb_table.lab_sessions.name
+      MOODLE_WEBHOOK_SECRET = var.moodle_webhook_secret
+      REQUIRE_MOODLE_AUTH   = tostring(var.require_moodle_auth)
+      ENVIRONMENT           = var.environment
+      PROJECT_NAME          = var.project_name
+      AWS_REGION_NAME       = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.terminate_lab_session]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-terminate-lab-session"
+    }
+  )
+}
+
+# List Lab Templates Lambda
+resource "aws_lambda_function" "list_lab_templates" {
+  filename         = "${path.module}/lambda/packages/list-lab-templates.zip"
+  function_name    = "${local.function_name_prefix}-list-lab-templates"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/list-lab-templates.zip") ? filebase64sha256("${path.module}/lambda/packages/list-lab-templates.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      LAB_TEMPLATES_TABLE   = aws_dynamodb_table.lab_templates.name
+      MOODLE_WEBHOOK_SECRET = var.moodle_webhook_secret
+      REQUIRE_MOODLE_AUTH   = tostring(var.require_moodle_auth)
+      ENVIRONMENT           = var.environment
+      PROJECT_NAME          = var.project_name
+      AWS_REGION_NAME       = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.list_lab_templates]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-list-lab-templates"
+    }
+  )
+}
+
+# =============================================================================
+# Lab API Gateway Integrations and Routes
+# =============================================================================
+
+# Create Lab Session Integration
+resource "aws_apigatewayv2_integration" "create_lab_session" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.create_lab_session.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "create_lab_session" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "POST /lab/create"
+  target    = "integrations/${aws_apigatewayv2_integration.create_lab_session.id}"
+}
+
+resource "aws_lambda_permission" "create_lab_session_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.create_lab_session.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}
+
+# Get Lab Status Integration
+resource "aws_apigatewayv2_integration" "get_lab_status" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.get_lab_status.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "get_lab_status" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "GET /lab/status/{sessionId}"
+  target    = "integrations/${aws_apigatewayv2_integration.get_lab_status.id}"
+}
+
+resource "aws_lambda_permission" "get_lab_status_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_lab_status.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}
+
+# Terminate Lab Session Integration
+resource "aws_apigatewayv2_integration" "terminate_lab_session" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.terminate_lab_session.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "terminate_lab_session" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "POST /lab/terminate"
+  target    = "integrations/${aws_apigatewayv2_integration.terminate_lab_session.id}"
+}
+
+resource "aws_lambda_permission" "terminate_lab_session_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.terminate_lab_session.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}
+
+# List Lab Templates Integration
+resource "aws_apigatewayv2_integration" "list_lab_templates" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.list_lab_templates.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "list_lab_templates" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "GET /lab/templates"
+  target    = "integrations/${aws_apigatewayv2_integration.list_lab_templates.id}"
+}
+
+resource "aws_lambda_permission" "list_lab_templates_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.list_lab_templates.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}

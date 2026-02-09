@@ -50,6 +50,7 @@ module "networking" {
   management_subnet_cidr    = var.management_subnet_cidr
   attackbox_subnet_cidr     = var.attackbox_subnet_cidr
   student_labs_cidr         = var.student_labs_cidr
+  lab_targets_cidr          = var.lab_targets_cidr
   student_lab_subnet_count  = var.student_lab_subnet_count
   enable_nat_gateway        = var.enable_nat_gateway
   attackbox_public_subnet   = var.attackbox_public_subnet  
@@ -254,6 +255,10 @@ module "orchestrator" {
     }
   }
   attackbox_security_group_id = module.security.attackbox_security_group_id
+
+  # Lab Management Integration
+  lab_targets_subnet_id = module.networking.lab_targets_subnet_id
+  lab_security_group_id = module.security.lab_targets_security_group_id
 
   # Guacamole Integration
   guacamole_private_ip     = module.guacamole.private_ip

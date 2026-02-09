@@ -226,3 +226,46 @@ variable "tags" {
   default     = {}
 }
 
+# =============================================================================
+# Lab Management Variables
+# =============================================================================
+
+variable "lab_targets_subnet_id" {
+  description = "Subnet ID for lab target VMs"
+  type        = string
+  default     = ""
+}
+
+variable "lab_security_group_id" {
+  description = "Security group ID for lab target VMs"
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
+# Demo Lab Configuration
+# =============================================================================
+
+variable "seed_demo_labs" {
+  description = "Whether to seed demo lab templates into DynamoDB"
+  type        = bool
+  default     = true
+}
+
+variable "demo_dvwa_ami_id" {
+  description = "AMI ID for DVWA demo lab (leave empty to use placeholder)"
+  type        = string
+  default     = "ami-0865a780706aaca8c"
+}
+
+variable "demo_juice_shop_ami_id" {
+  description = "AMI ID for OWASP Juice Shop demo lab (leave empty to use placeholder)"
+  type        = string
+  default     = "ami-085cdbc760d6c098d"
+}
+
+variable "demo_metasploitable_ami_id" {
+  description = "AMI ID for Metasploitable demo lab (leave empty to use placeholder)"
+  type        = string
+  default     = "ami-placeholder-metasploitable"
+}

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/cyberlab/db" VERSION="20260204" COMMENT="CyberLab activity module tables"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="cyberlab" COMMENT="CyberLab activity instances">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Course ID this activity belongs to"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Activity name"/>
+        <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Activity introduction/description"/>
+        <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Format of intro field"/>
+        <FIELD NAME="template_id" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="Lab template identifier"/>
+        <FIELD NAME="difficulty" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="beginner" SEQUENCE="false" COMMENT="Difficulty level: beginner, intermediate, advanced, expert"/>
+        <FIELD NAME="duration_hours" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="2" SEQUENCE="false" COMMENT="Maximum session duration in hours"/>
+        <FIELD NAME="max_attempts" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Max attempts allowed (0 = unlimited)"/>
+        <FIELD NAME="connection_methods" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of connection methods: lynkbox, tailscale, openvpn"/>
+        <FIELD NAME="objectives" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Lab objectives/goals"/>
+        <FIELD NAME="hints" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Optional hints for students"/>
+        <FIELD NAME="flag_format" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Expected flag format for CTF-style labs"/>
+        <FIELD NAME="expected_flags" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of expected flags for validation"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+        <INDEX NAME="template_id" UNIQUE="false" FIELDS="template_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="cyberlab_sessions" COMMENT="CyberLab student session tracking">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="cyberlabid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Foreign key to cyberlab table"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Student user ID"/>
+        <FIELD NAME="session_id" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="Unique session identifier from API"/>
+        <FIELD NAME="instance_id" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="AWS EC2 instance ID"/>
+        <FIELD NAME="target_ip" TYPE="char" LENGTH="45" NOTNULL="false" SEQUENCE="false" COMMENT="Target VM private IP address"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="pending" SEQUENCE="false" COMMENT="Session status: pending, launching, running, terminated, error"/>
+        <FIELD NAME="connection_url" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Guacamole or VPN connection URL"/>
+        <FIELD NAME="started_at" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="ended_at" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="flags_found" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of flags captured by student"/>
+        <FIELD NAME="notes" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Student notes or error messages"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="cyberlabid" TYPE="foreign" FIELDS="cyberlabid" REFTABLE="cyberlab" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="session_id" UNIQUE="true" FIELDS="session_id"/>
+        <INDEX NAME="status" UNIQUE="false" FIELDS="status"/>
+        <INDEX NAME="cyberlabid_userid" UNIQUE="false" FIELDS="cyberlabid, userid"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="cyberlab_flags" COMMENT="CyberLab flag submissions and validation">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sessionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Foreign key to cyberlab_sessions"/>
+        <FIELD NAME="flag_submitted" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="The flag string submitted by student"/>
+        <FIELD NAME="is_correct" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether submission was correct"/>
+        <FIELD NAME="submitted_at" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sessionid" TYPE="foreign" FIELDS="sessionid" REFTABLE="cyberlab_sessions" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sessionid_submitted" UNIQUE="false" FIELDS="sessionid, submitted_at"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

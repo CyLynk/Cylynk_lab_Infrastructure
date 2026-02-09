@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs>
+    <linearGradient id="labGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2E7D32;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Terminal/Lab icon -->
+  <rect x="2" y="3" width="20" height="18" rx="2" fill="url(#labGrad)"/>
+  <rect x="4" y="5" width="16" height="14" rx="1" fill="#1a1a2e"/>
+  <!-- Command prompt -->
+  <text x="6" y="12" fill="#4CAF50" font-family="monospace" font-size="5" font-weight="bold">&gt;_</text>
+  <!-- Target crosshair -->
+  <circle cx="15" cy="12" r="3" fill="none" stroke="#ff5722" stroke-width="0.8"/>
+  <line x1="15" y1="8" x2="15" y2="10" stroke="#ff5722" stroke-width="0.8"/>
+  <line x1="15" y1="14" x2="15" y2="16" stroke="#ff5722" stroke-width="0.8"/>
+  <line x1="11" y1="12" x2="13" y2="12" stroke="#ff5722" stroke-width="0.8"/>
+  <line x1="17" y1="12" x2="19" y2="12" stroke="#ff5722" stroke-width="0.8"/>
+</svg>

@@ -2,170 +2,166 @@
 
 ## Project Overview
 
-This is a **hybrid IaC project** deploying a cloud-based cybersecurity lab environment (CyberLab) on AWS. The stack integrates:
-- **Terraform** (infrastructure provisioning): Modular AWS resources with dev/prod environments
-- **Ansible** (configuration management): Post-provisioning setup for Guacamole and AttackBox instances
-- **Python Lambdas** (orchestration): Session management API connecting Moodle LMS to lab resources
-- **Moodle Plugin** (frontend): PHP/JavaScript plugin providing student access to on-demand Kali Linux AttackBoxes via Guacamole RDP gateway
-- **Packer** (AMI building): Custom Kali Linux AttackBox images with pre-installed tools
+**Hybrid IaC project** deploying a cloud-based cybersecurity lab (CyberLab/Cylynk) on AWS:
+
+- **Terraform**: Modular AWS resources with `environments/dev/` and `environments/prod/`
+- **Ansible**: Post-provisioning for Guacamole and AttackBox instances
+- **Python Lambdas**: Session orchestration API (16 functions including WebSocket + lab management)
+- **Moodle Plugins**: Two plugins - `local_attackbox` (floating launcher) + `mod_cyberlab` (course activity)
+- **Packer**: Custom Kali Linux + vulnerable lab target AMIs (DVWA, Juice Shop)
 
 ## Architecture
 
 ```
-Moodle LMS → API Gateway → Lambda Functions → DynamoDB (sessions)
-                                           ↓
-                              EC2 Auto Scaling (AttackBox pool)
-                                           ↓
-                              Guacamole (RDP Gateway) → Student Browser
+Moodle LMS → API Gateway → Lambda → DynamoDB (sessions/usage/lab_templates)
+                                  ↓
+                     EC2 Auto Scaling (tiered AttackBox pools)
+                                  ↓
+                     Guacamole (RDP Gateway) → Student Browser
 ```
 
-**Key Components:**
-- `modules/orchestrator`: Lambda-based API for session lifecycle (create/get-status/terminate/pool-manager/admin-sessions)
-- `modules/networking`: VPC with management, AttackBox pool, and student lab subnets
-- `modules/guacamole`: Apache Guacamole RDP gateway (browser-based access to AttackBoxes)
-- `modules/attackbox`: Auto Scaling Group managing Kali Linux instances
-- `moodle-plugin/local_attackbox`: PHP plugin with AJAX endpoints and JavaScript launcher UI
+**Key Modules:**
+
+- `modules/orchestrator`: Lambda API + DynamoDB + lab templates (`lab-templates.tf`)
+- `modules/networking`: VPC with management, AttackBox pool, student lab subnets
+- `modules/attackbox`: Multi-tier ASGs (freemium/starter/pro) with warm pools
+- `modules/guacamole`: Apache Guacamole RDP gateway with Let's Encrypt SSL
+- `moodle-plugin/local_attackbox`: Site-wide floating launcher UI, usage dashboard
+- `moodle-plugin/mod_cyberlab`: Course activity module for embedded labs (depends on local_attackbox)
 
 ## Critical Workflows
 
 ### 1. Terraform Development
+
 ```bash
-# Always format before committing - CI checks this
-terraform fmt -recursive
-
-# Development environment workflow
-cd environments/dev
-terraform init
-terraform plan
-terraform apply
-
-# Production deployments are manual via GitHub Actions only
+terraform fmt -recursive           # Required before commit (CI checks)
+cd environments/dev && terraform init && terraform plan
+# Production: manual via GitHub Actions → workflow_dispatch
 ```
 
-**Module Dependencies:** Networking → Security → Guacamole/Orchestrator/AttackBox (check `main.tf` output references)
+**Module Order:** Networking → Security → Monitoring → Guacamole/Orchestrator/AttackBox
 
 ### 2. Lambda Development
-```bash
-# Build Lambda packages and layers (common utilities)
-cd modules/orchestrator/scripts
-./build-lambdas.sh
 
-# Output: lambda/packages/*.zip and lambda/layers/common.zip
-# Common layer: modules/orchestrator/lambda/common/*.py (shared utilities for all functions)
+```bash
+# Build all Lambda packages (CI/CD uses this)
+python scripts/build-lambdas.py
+# Output: modules/orchestrator/lambda/packages/*.zip, lambda/layers/common.zip
 ```
 
-**Lambda Structure:**
-- Each function has `index.py` (entry point with `lambda_handler`)
-- Common layer (`lambda/common/`) provides: `utils.py`, DynamoDB/EC2/ASG clients, auth verification
-- Functions import via `from utils import DynamoDBClient, verify_moodle_request, ...`
+**Lambda Functions (16 total):**
+
+- **Session:** `create-session`, `get-session-status`, `terminate-session`, `session-heartbeat`, `admin-sessions`
+- **Pool/Usage:** `pool-manager`, `get-usage`, `usage-history`
+- **Labs:** `create-lab-session`, `get-lab-status`, `terminate-lab-session`, `list-lab-templates`
+- **WebSocket:** `websocket-connect`, `websocket-disconnect`, `websocket-default`, `websocket-push`
+
+**Pattern:** Each function has `index.py` with `lambda_handler(event, context)`. Import shared utils:
+
+```python
+from utils import DynamoDBClient, success_response, error_response, SessionStatus
+```
 
 ### 3. Ansible Configuration
+
 ```bash
 cd ansible
-# Install Galaxy dependencies first
 ansible-galaxy collection install -r requirements.yml
-
-# Update inventory with Terraform outputs
-terraform output -json | jq -r '.guacamole_public_ip.value'
-# Edit inventory/hosts.yml with IP
-
-# Run playbook
 ansible-playbook playbooks/guacamole.yml -i inventory/hosts.yml
 ```
 
-### 4. Packer Image Building
+### 4. Packer AMI Building
+
 ```bash
-cd packer/attackbox
-packer build -var-file=variables.pkrvars.hcl kali-attackbox.pkr.hcl
-# Creates AMI: cyberlab-attackbox-kali-{timestamp}
+# AttackBox (Kali Linux)
+cd packer/attackbox && packer build -var-file=dev.pkrvars.hcl kali-attackbox.pkr.hcl
+
+# Lab targets (DVWA, Juice Shop)
+cd packer/labs && packer build dvwa.pkr.hcl
 ```
 
 ## Project Conventions
 
 ### Terraform
-- **Tagging:** All resources use `default_tags` provider block (Project, Environment, ManagedBy, Owner)
-- **Naming:** `{project_name}-{environment}-{resource_type}` (e.g., `cyberlab-dev-api-gateway`)
-- **Environments:** `environments/dev/` and `environments/prod/` reference `modules/` via relative paths (`../../modules/networking`)
-- **Variables:** Each module has `variables.tf` with descriptions, types, defaults. Root environments have `terraform.tfvars.example`
-- **State:** Backend configured in `environments/*/backend.tf` (S3 + DynamoDB lock)
+
+- **Tagging:** Provider `default_tags` block (Project, Environment, ManagedBy, Owner, CostCenter)
+- **Naming:** `{project_name}-{environment}-{resource}` (e.g., `cylynk_infra-dev-api-gateway`)
+- **Modules:** Referenced via `../../modules/{name}` from environments
+- **State:** S3 backend + DynamoDB lock (see `environments/*/backend.tf`)
+- **Secrets:** CI/CD generates `terraform.tfvars` from GitHub secrets/variables (no secrets in repo)
 
 ### Lambda Functions
-- **Authentication:** Moodle requests validated via HMAC-SHA256 tokens (shared secret `MOODLE_WEBHOOK_SECRET`)
-- **Session Management:** DynamoDB TTL auto-expires sessions after `SESSION_TTL_HOURS` (default: 4 hours)
-- **Error Handling:** All functions use `error_response()` and `success_response()` from common layer
-- **Multi-tier Plans:** Functions route to different ASGs based on `plan` field (freemium/starter/pro)
 
-### Moodle Plugin
-- **File Structure:** `db/hooks.php` registers callbacks, `classes/hook_callbacks.php` injects JS, `ajax/*.php` endpoints
-- **AJAX Pattern:** All endpoints require `require_login()`, check capabilities (`local/attackbox:launchattackbox`)
-- **Token Generation:** `ajax/get_token.php` creates HMAC-signed JWTs for API authentication
-- **UI:** Floating button injected via `amd/src/launcher.js`, styles auto-loaded from `styles.css`
+- **Auth:** HMAC-SHA256 tokens via `MOODLE_WEBHOOK_SECRET` env var
+- **Sessions:** DynamoDB TTL on `expires_at` field (default 4h via `session_ttl_hours`)
+- **Response helpers:** Always use `success_response(data)` or `error_response(status, msg)`
+- **Plan Tiers:** freemium (t3.micro, 5h/mo), starter (t3.small, 15h/mo), pro (t3.medium, unlimited)
+
+### Moodle Plugins
+
+**`local_attackbox`** (site-wide, floating button):
+
+- Version: Increment `$plugin->version = YYYYMMDDXX` in `version.php`
+- AJAX endpoints: `ajax/*.php` - all require `require_login()` + `require_sesskey()`
+- JS modules: `amd/src/launcher.js`, `admin-dashboard.js`, `usage-dashboard.js`
+- Deploy: Copy to `local/attackbox/`, run `php admin/cli/purge_caches.php`
+
+**`mod_cyberlab`** (course activity):
+
+- Depends on `local_attackbox` (see `$plugin->dependencies`)
+- Embeds lab sessions directly in course activities
+- Template IDs must match `lab-templates.tf` definitions (e.g., `dvwa-web-vuln`, `juice-shop`)
 
 ### CI/CD (GitHub Actions)
-- **OIDC Auth:** No AWS credentials stored - uses OIDC with role ARNs (`AWS_ROLE_TO_ASSUME`, `PROD_AWS_ROLE_TO_ASSUME`)
-- **Auto-deploy:** Merge to `main` → auto-deploys to dev environment
-- **Manual Production:** Prod deployments require manual trigger in Actions tab
-- **Validation Checks:** PR must pass `terraform fmt`, `terraform validate`, `ansible-lint`
 
-## Key Files to Reference
+- **OIDC Auth:** No AWS keys - uses `AWS_ROLE_TO_ASSUME` / `PROD_AWS_ROLE_TO_ASSUME`
+- **Auto-deploy:** Push to `main` → deploys dev environment
+- **Prod deploy:** Manual via Actions → "Terraform Deploy" → select `prod` + `apply`
+- **Workflows:** `terraform-validate.yml`, `terraform-deploy.yml`, `ansible-validate.yml`, `security-scan.yml`
 
-- **Module outputs:** `modules/*/outputs.tf` - outputs referenced across modules (e.g., `module.networking.vpc_id`)
-- **Session schema:** `modules/orchestrator/README.md` - DynamoDB structure, API contracts
-- **Common utilities:** `modules/orchestrator/lambda/common/utils.py` - shared Lambda code
-- **Admin dashboard:** `ADMIN_DASHBOARD.md` - session management UI architecture
-- **Cost estimation:** `PRODUCTION_COST_ESTIMATE.md` - infrastructure costs breakdown
+## Key Files
 
-## Integration Points
+| Purpose             | Location                                              |
+| ------------------- | ----------------------------------------------------- |
+| Module wiring       | `environments/{dev,prod}/main.tf`                     |
+| Session API logic   | `modules/orchestrator/lambda/*/index.py`              |
+| Shared Lambda utils | `modules/orchestrator/lambda/common/utils.py`         |
+| DynamoDB schema     | `modules/orchestrator/main.tf` (tables section)       |
+| Lab templates seed  | `modules/orchestrator/lab-templates.tf`               |
+| Tier config         | `environments/*/terraform.tfvars` → `attackbox_tiers` |
+| Moodle launcher UI  | `moodle-plugin/local_attackbox/amd/src/launcher.js`   |
+| Activity module     | `moodle-plugin/mod_cyberlab/view.php`                 |
 
-1. **Moodle ↔ Lambda:** Plugin generates HMAC token → POST to API Gateway → `create-session` Lambda
-2. **Lambda ↔ DynamoDB:** Sessions table (student sessions), instance-pool table (available AttackBoxes), usage table (metrics)
-3. **Lambda ↔ EC2/ASG:** Auto Scaling API to launch instances, EC2 API for status checks
-4. **Lambda ↔ Guacamole:** REST API to create RDP connections (`GuacamoleClient` in common layer)
-5. **Terraform → Ansible:** Terraform creates instances → Ansible configures via dynamic inventory (`inventory/aws_ec2.yml`)
+## Data Flow Examples
 
-## Common Patterns
+1. **Student launches AttackBox:** `launcher.js` → `ajax/get_token.php` (HMAC) → API Gateway → `create-session` Lambda → ASG → Guacamole connection → RDP URL returned
+2. **Lab activity start:** `mod_cyberlab/view.php` → `list-lab-templates` → `create-lab-session` → spins up target VM + AttackBox
+3. **Usage tracking:** All session starts/stops update `usage` table → `get-usage` Lambda returns monthly minutes
 
-### Adding a New Lambda Function
-1. Create `modules/orchestrator/lambda/{function-name}/index.py` with `lambda_handler(event, context)`
-2. Import utilities: `from utils import DynamoDBClient, error_response, success_response`
-3. Add to `modules/orchestrator/scripts/build-lambdas.sh` FUNCTIONS array
-4. Add resource in `modules/orchestrator/main.tf` (Lambda function + API Gateway route if needed)
-5. Run `./build-lambdas.sh` to package
+## Common Tasks
 
-### Adding a New Terraform Module
-1. Create `modules/{module-name}/` with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
-2. Define outputs in `outputs.tf` for cross-module references
-3. Import module in `environments/dev/main.tf` and `environments/prod/main.tf`
-4. Pass dependencies via module inputs (e.g., `vpc_id = module.networking.vpc_id`)
+### Add New Lambda Function
 
-### Modifying Session Behavior
-- **TTL/Limits:** Update `SESSION_TTL_HOURS`, `MAX_SESSIONS` environment variables in `modules/orchestrator/main.tf`
-- **Session Schema:** Modify DynamoDB operations in `lambda/common/utils.py` and update consuming functions
-- **Plan Tiers:** Adjust `DEFAULT_PLAN_LIMITS` in `lambda/common/utils.py`, configure ASG names in orchestrator variables
+1. Create `modules/orchestrator/lambda/{name}/index.py` with `lambda_handler(event, context)`
+2. Add function name to `functions` list in `scripts/build-lambdas.py`
+3. Add Lambda resource + API Gateway route in `modules/orchestrator/main.tf`
 
-## Testing Locally
+### Add New Lab Template
 
-```bash
-# Terraform validation (run from environment directory)
-cd environments/dev
-terraform init
-terraform validate
-terraform plan
+1. Add template to `demo_lab_templates` local in `modules/orchestrator/lab-templates.tf`
+2. Build AMI with Packer in `packer/labs/` if needed
+3. Set AMI ID via `demo_dvwa_ami_id` / `demo_juice_shop_ami_id` variables
 
-# Ansible syntax check
-cd ansible
-ansible-playbook playbooks/*.yml --syntax-check
-ansible-lint playbooks/ roles/
+### Modify Session Limits
 
-# Lambda testing (requires AWS credentials)
-cd modules/orchestrator/lambda/create-session
-python -m pytest tests/  # if tests exist
-```
+- **TTL:** `session_ttl_hours` in `terraform.tfvars` (default: 4)
+- **Quotas:** `DEFAULT_PLAN_LIMITS` dict in `lambda/common/utils.py`
+- **Instance types:** `PlanTier.INSTANCE_TYPES` in `lambda/common/utils.py`
 
 ## Troubleshooting
 
-- **Lambda import errors:** Ensure common layer is built (`./build-lambdas.sh`) and attached in Terraform
-- **Guacamole connection fails:** Check security group rules (port 8080), verify private IP in Lambda env vars
-- **Terraform module not found:** Check relative paths in `source` (should be `../../modules/{name}` from environments)
-- **CI/CD OIDC errors:** Verify IAM role trust policy includes GitHub OIDC provider, check role ARN in secrets
-- **Moodle plugin not loading:** Clear Moodle cache (`php admin/cli/purge_caches.php`), check `version.php` incremented
+- **Lambda import error:** Run `python scripts/build-lambdas.py`, verify layer attached in Terraform
+- **Guacamole unreachable:** Check SG port 8080, verify `GUACAMOLE_PRIVATE_IP` env var
+- **OIDC failure:** Check IAM trust policy for GitHub OIDC provider ARN
+- **Moodle plugin missing:** Increment `version.php`, purge caches, check `$plugin->dependencies`
+- **Lab template not found:** Verify `template_id` matches between Moodle plugin and `lab-templates.tf`

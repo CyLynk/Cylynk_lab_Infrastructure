@@ -327,3 +327,54 @@ resource "aws_vpc_security_group_egress_rule" "lambda_guacamole" {
 data "aws_key_pair" "existing" {
   key_name = var.existing_key_pair_name
 }
+
+# =============================================================================
+# Security Group - Lab Targets (Vulnerable VMs)
+# =============================================================================
+
+resource "aws_security_group" "lab_targets" {
+  name        = "${var.project_name}-${var.environment}-lab-targets-sg"
+  description = "Security group for lab target VMs (vulnerable machines)"
+  vpc_id      = var.vpc_id
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.project_name}-${var.environment}-lab-targets-sg"
+    }
+  )
+}
+
+# Allow all traffic from AttackBox subnet (students need to attack these)
+resource "aws_vpc_security_group_ingress_rule" "lab_from_attackbox" {
+  security_group_id            = aws_security_group.lab_targets.id
+  description                  = "All traffic from AttackBox instances"
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.attackbox.id
+}
+
+# Allow all traffic from AttackBox subnet CIDR (backup rule)
+resource "aws_vpc_security_group_ingress_rule" "lab_from_attackbox_cidr" {
+  security_group_id = aws_security_group.lab_targets.id
+  description       = "All traffic from AttackBox subnet CIDR"
+  ip_protocol       = "-1"
+  cidr_ipv4         = var.attackbox_subnet_cidr
+}
+
+# Allow SSH from management for administration
+resource "aws_vpc_security_group_ingress_rule" "lab_ssh_admin" {
+  security_group_id = aws_security_group.lab_targets.id
+  description       = "SSH from management"
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  cidr_ipv4         = var.allowed_ssh_cidr
+}
+
+# Outbound: Allow internet access for package updates (can be restricted)
+resource "aws_vpc_security_group_egress_rule" "lab_outbound" {
+  security_group_id = aws_security_group.lab_targets.id
+  description       = "Allow outbound for updates"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}

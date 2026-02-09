@@ -55,6 +55,16 @@ output "student_lab_subnet_cidrs" {
   value       = aws_subnet.student_labs[*].cidr_block
 }
 
+output "lab_targets_subnet_id" {
+  description = "ID of the lab targets subnet"
+  value       = aws_subnet.lab_targets.id
+}
+
+output "lab_targets_subnet_cidr" {
+  description = "CIDR block of the lab targets subnet"
+  value       = aws_subnet.lab_targets.cidr_block
+}
+
 output "public_route_table_id" {
   description = "ID of the public route table"
   value       = aws_route_table.public.id

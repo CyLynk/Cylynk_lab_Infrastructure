@@ -131,3 +131,68 @@ output "idle_detection_config" {
   }
 }
 
+# =============================================================================
+# Lab Management Outputs
+# =============================================================================
+
+output "lab_templates_table_name" {
+  description = "DynamoDB lab templates table name"
+  value       = aws_dynamodb_table.lab_templates.name
+}
+
+output "lab_templates_table_arn" {
+  description = "DynamoDB lab templates table ARN"
+  value       = aws_dynamodb_table.lab_templates.arn
+}
+
+output "lab_sessions_table_name" {
+  description = "DynamoDB lab sessions table name"
+  value       = aws_dynamodb_table.lab_sessions.name
+}
+
+output "lab_sessions_table_arn" {
+  description = "DynamoDB lab sessions table ARN"
+  value       = aws_dynamodb_table.lab_sessions.arn
+}
+
+# Lab API Endpoints
+output "lab_create_endpoint" {
+  description = "Endpoint to create a lab session"
+  value       = "${aws_apigatewayv2_api.orchestrator.api_endpoint}/${var.api_stage_name}/lab/create"
+}
+
+output "lab_status_endpoint" {
+  description = "Endpoint to get lab session status (append /{sessionId})"
+  value       = "${aws_apigatewayv2_api.orchestrator.api_endpoint}/${var.api_stage_name}/lab/status"
+}
+
+output "lab_terminate_endpoint" {
+  description = "Endpoint to terminate a lab session"
+  value       = "${aws_apigatewayv2_api.orchestrator.api_endpoint}/${var.api_stage_name}/lab/terminate"
+}
+
+output "lab_templates_endpoint" {
+  description = "Endpoint to list lab templates"
+  value       = "${aws_apigatewayv2_api.orchestrator.api_endpoint}/${var.api_stage_name}/lab/templates"
+}
+
+# Lab Lambda Function Names
+output "create_lab_session_function_name" {
+  description = "Create lab session Lambda function name"
+  value       = aws_lambda_function.create_lab_session.function_name
+}
+
+output "get_lab_status_function_name" {
+  description = "Get lab status Lambda function name"
+  value       = aws_lambda_function.get_lab_status.function_name
+}
+
+output "terminate_lab_session_function_name" {
+  description = "Terminate lab session Lambda function name"
+  value       = aws_lambda_function.terminate_lab_session.function_name
+}
+
+output "list_lab_templates_function_name" {
+  description = "List lab templates Lambda function name"
+  value       = aws_lambda_function.list_lab_templates.function_name
+}

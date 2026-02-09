@@ -1,0 +1,17 @@
+{
+  "builds": [
+    {
+      "name": "dvwa",
+      "builder_type": "amazon-ebs",
+      "build_time": 1770244124,
+      "files": null,
+      "artifact_id": "us-west-2:ami-0865a780706aaca8c",
+      "packer_run_uuid": "5a4d685b-18ae-9070-a20e-0a15ae5a747a",
+      "custom_data": {
+        "description": "DVWA Lab Target",
+        "lab_type": "dvwa"
+      }
+    }
+  ],
+  "last_run_uuid": "5a4d685b-18ae-9070-a20e-0a15ae5a747a"
+}

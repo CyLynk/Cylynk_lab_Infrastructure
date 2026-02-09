@@ -1,0 +1,17 @@
+{
+  "builds": [
+    {
+      "name": "juice_shop",
+      "builder_type": "amazon-ebs",
+      "build_time": 1770243123,
+      "files": null,
+      "artifact_id": "us-west-2:ami-085cdbc760d6c098d",
+      "packer_run_uuid": "2f445bef-d6fa-114d-7fbe-fb4f31da2776",
+      "custom_data": {
+        "description": "OWASP Juice Shop Lab Target",
+        "lab_type": "juice-shop"
+      }
+    }
+  ],
+  "last_run_uuid": "2f445bef-d6fa-114d-7fbe-fb4f31da2776"
+}

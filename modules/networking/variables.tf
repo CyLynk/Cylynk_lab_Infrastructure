@@ -43,6 +43,12 @@ variable "student_labs_cidr" {
   default     = "10.0.100.0/20"
 }
 
+variable "lab_targets_cidr" {
+  description = "CIDR block for lab target VMs subnet"
+  type        = string
+  default     = "10.0.50.0/24"
+}
+
 variable "student_lab_subnet_count" {
   description = "Number of student lab subnets to create"
   type        = number

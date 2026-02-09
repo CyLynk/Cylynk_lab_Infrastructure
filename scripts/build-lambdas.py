@@ -76,6 +76,7 @@ def main():
     
     # Lambda functions to build
     functions = [
+        # AttackBox session management
         "create-session",
         "get-session-status", 
         "terminate-session",
@@ -84,10 +85,16 @@ def main():
         "usage-history",
         "admin-sessions",
         "session-heartbeat",
+        # WebSocket functions
         "websocket-connect",
         "websocket-disconnect",
         "websocket-default",
         "websocket-push",
+        # Lab management
+        "create-lab-session",
+        "get-lab-status",
+        "terminate-lab-session",
+        "list-lab-templates",
     ]
     
     # Build each function

@@ -281,7 +281,7 @@ define(["jquery", "core/str"], function ($, Str) {
           function () {
             self.recordUserActivity();
           },
-          { passive: true }
+          { passive: true },
         );
       });
 
@@ -371,7 +371,7 @@ define(["jquery", "core/str"], function ($, Str) {
               tab_visible: this.isTabVisible,
               focus_mode: this.focusMode,
             }),
-          }
+          },
         );
 
         if (!response.ok) {
@@ -441,7 +441,7 @@ define(["jquery", "core/str"], function ($, Str) {
             time_until_termination:
               (this.idleThresholds?.termination || 1800) - idleSeconds,
           },
-          "warning"
+          "warning",
         );
       }
     }
@@ -456,14 +456,14 @@ define(["jquery", "core/str"], function ($, Str) {
 
       const timeUntilTermination = Math.max(
         0,
-        data.time_until_termination || 0
+        data.time_until_termination || 0,
       );
       const minutes = Math.floor(timeUntilTermination / 60);
       const seconds = Math.floor(timeUntilTermination % 60);
 
       // Update countdown display
       this.$idleCountdown.text(
-        `${minutes}:${seconds.toString().padStart(2, "0")}`
+        `${minutes}:${seconds.toString().padStart(2, "0")}`,
       );
 
       // Update message based on level
@@ -471,13 +471,13 @@ define(["jquery", "core/str"], function ($, Str) {
         this.$idleWarning.addClass("idle-critical").removeClass("idle-warning");
         this.$idleMessage.html(
           this.strings.idleCriticalMessage ||
-            "<strong>Critical:</strong> Your session will be terminated very soon due to inactivity!"
+            "<strong>Critical:</strong> Your session will be terminated very soon due to inactivity!",
         );
       } else {
         this.$idleWarning.addClass("idle-warning").removeClass("idle-critical");
         this.$idleMessage.html(
           this.strings.idleWarningMessage ||
-            "Your session has been idle. It will be automatically terminated to save resources."
+            "Your session has been idle. It will be automatically terminated to save resources.",
         );
       }
 
@@ -526,7 +526,7 @@ define(["jquery", "core/str"], function ($, Str) {
       this.showAlert(
         "Focus mode enabled. Idle termination is now disabled for this session.",
         "Focus Mode",
-        "success"
+        "success",
       );
     }
 
@@ -555,7 +555,7 @@ define(["jquery", "core/str"], function ($, Str) {
         this.showAlert(
           "Your session was terminated due to inactivity. You can launch a new session when needed.",
           "Session Ended",
-          "warning"
+          "warning",
         );
       }
     }
@@ -566,8 +566,9 @@ define(["jquery", "core/str"], function ($, Str) {
     playIdleAlertSound() {
       try {
         // Create a simple beep using Web Audio API
-        const audioContext = new (window.AudioContext ||
-          window.webkitAudioContext)();
+        const audioContext = new (
+          window.AudioContext || window.webkitAudioContext
+        )();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
 
@@ -603,7 +604,7 @@ define(["jquery", "core/str"], function ($, Str) {
               "X-Moodle-Token": tokenData.token,
               Accept: "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -672,7 +673,7 @@ define(["jquery", "core/str"], function ($, Str) {
           ) {
             // Session exists but not ready yet - start polling to complete the launch
             console.log(
-              "Session found but still provisioning, resuming polling..."
+              "Session found but still provisioning, resuming polling...",
             );
             this.isLaunching = true;
             this.showOverlay();
@@ -684,7 +685,7 @@ define(["jquery", "core/str"], function ($, Str) {
             console.warn(
               "Session found in unexpected state:",
               session.status,
-              session
+              session,
             );
           }
         }
@@ -1056,6 +1057,7 @@ define(["jquery", "core/str"], function ($, Str) {
                         </div>
                         <h2 class="attackbox-state-title">${this.strings.successTitle}</h2>
                         <p class="attackbox-state-message">${this.strings.successMessage}</p>
+                        <p class="attackbox-state-hint">💡 When you're done, use the <strong>"End Session"</strong> button to close your LynkBox.</p>
                         <button id="attackbox-open" class="attackbox-btn-primary" type="button">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -1222,7 +1224,7 @@ define(["jquery", "core/str"], function ($, Str) {
         this.updateProgress(10, this.strings.progress10);
         const sessionData = await this.createSession(
           tokenData.token,
-          tokenData.api_url
+          tokenData.api_url,
         );
 
         // API returns { success, message, data, timestamp }
@@ -1247,7 +1249,7 @@ define(["jquery", "core/str"], function ($, Str) {
           if (session.reused) {
             this.updateProgress(
               25,
-              "Waiting for existing session to be ready..."
+              "Waiting for existing session to be ready...",
             );
           }
           this.startPolling(tokenData.api_url);
@@ -1270,7 +1272,7 @@ define(["jquery", "core/str"], function ($, Str) {
           headers: {
             Accept: "application/json",
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -1325,14 +1327,14 @@ define(["jquery", "core/str"], function ($, Str) {
               `<strong>Plan:</strong> ${quotaData.plan || "Freemium"}<br>` +
               `<strong>Used:</strong> ${hoursUsed}h / ${hoursLimit}h<br><br>` +
               `Your quota resets on <strong>${resetDate}</strong>.<br><br>` +
-              `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`
+              `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`,
           );
         }
 
         throw new Error(
           errorData.error ||
             errorData.message ||
-            `API error: ${response.status}`
+            `API error: ${response.status}`,
         );
       }
 
@@ -1516,7 +1518,7 @@ define(["jquery", "core/str"], function ($, Str) {
       if (session.status !== "ready" && session.status !== "active") {
         console.warn("Session not ready yet, status:", session.status);
         this.showError(
-          `Session is ${session.status}. Please wait a moment and try again.`
+          `Session is ${session.status}. Please wait a moment and try again.`,
         );
         return;
       }
@@ -1559,7 +1561,7 @@ define(["jquery", "core/str"], function ($, Str) {
         console.error("No connection URL in session:", session);
         console.error("Available keys:", Object.keys(session));
         this.showError(
-          "Session found but no connection URL available. Please check CloudWatch logs or try terminating and creating a new session."
+          "Session found but no connection URL available. Please check CloudWatch logs or try terminating and creating a new session.",
         );
       }
     }
@@ -1612,7 +1614,7 @@ define(["jquery", "core/str"], function ($, Str) {
         console.error("No connection URL in session:", session);
         console.error("Available keys:", Object.keys(session));
         this.showError(
-          "LynkBox is ready but no connection URL available. Please check CloudWatch logs or contact support."
+          "LynkBox is ready but no connection URL available. Please check CloudWatch logs or contact support.",
         );
       }
     }
@@ -1737,7 +1739,7 @@ define(["jquery", "core/str"], function ($, Str) {
     typeMessage(message) {
       const $container = this.$statusMessage;
       $container.html(
-        '<span class="attackbox-typed"></span><span class="attackbox-cursor">▋</span>'
+        '<span class="attackbox-typed"></span><span class="attackbox-cursor">▋</span>',
       );
 
       const $typed = $container.find(".attackbox-typed");
@@ -1803,7 +1805,7 @@ define(["jquery", "core/str"], function ($, Str) {
             headers: {
               Accept: "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -1836,12 +1838,12 @@ define(["jquery", "core/str"], function ($, Str) {
         } else {
           $badgeText.html(
             `<strong>${data.plan}:</strong> ${data.hours_used}h / ${data.hours_limit}h ` +
-              `<span class="usage-remaining">(${data.hours_remaining}h left)</span>`
+              `<span class="usage-remaining">(${data.hours_remaining}h left)</span>`,
           );
 
           // Color coding based on percentage
           $badge.removeClass(
-            "usage-low usage-medium usage-high usage-unlimited"
+            "usage-low usage-medium usage-high usage-unlimited",
           );
           if (data.percentage >= 90) {
             $badge.addClass("usage-high");
@@ -1926,7 +1928,7 @@ define(["jquery", "core/str"], function ($, Str) {
             `<strong>Plan:</strong> ${data.plan}<br>` +
             `<strong>Used:</strong> ${data.hours_used}h / ${data.hours_limit}h<br><br>` +
             `Your quota resets on <strong>${data.reset_date}</strong>.<br><br>` +
-            `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`
+            `<a href="/local/attackbox/upgrade.php" style="color: #00ff88; text-decoration: underline;">Upgrade your plan</a> for more hours.`,
         );
         return false;
       }
@@ -1936,7 +1938,7 @@ define(["jquery", "core/str"], function ($, Str) {
         return await this.showConfirm(
           `You only have <strong>${data.minutes_remaining} minutes</strong> remaining in your quota.<br><br>Do you want to continue?`,
           "Low Quota Warning",
-          { confirmText: "Continue", cancelText: "Cancel", type: "warning" }
+          { confirmText: "Continue", cancelText: "Cancel", type: "warning" },
         );
       }
 
@@ -2051,11 +2053,11 @@ define(["jquery", "core/str"], function ($, Str) {
         $attackLabel.html(`<strong>${attack.icon} ${attack.name}</strong>`);
         $attackPath.css(
           "background",
-          `linear-gradient(90deg, ${attack.color}, transparent)`
+          `linear-gradient(90deg, ${attack.color}, transparent)`,
         );
         $attackPath.attr(
           "data-attack",
-          attack.name.toLowerCase().replace(/\\s+/g, "-")
+          attack.name.toLowerCase().replace(/\\s+/g, "-"),
         );
 
         // Fade in
@@ -2103,7 +2105,7 @@ define(["jquery", "core/str"], function ($, Str) {
           this.showAlert(
             "Your session has expired. Please launch a new session.",
             "Session Expired",
-            "warning"
+            "warning",
           );
         }, 2000);
         return;
@@ -2126,7 +2128,7 @@ define(["jquery", "core/str"], function ($, Str) {
 
       // Color coding based on time remaining
       this.$timerBadge.removeClass(
-        "timer-low timer-medium timer-high timer-expired"
+        "timer-low timer-medium timer-high timer-expired",
       );
       if (totalMinutes <= 5) {
         this.$timerBadge.addClass("timer-low");
@@ -2154,7 +2156,7 @@ define(["jquery", "core/str"], function ($, Str) {
 
       if (!this.activeSessionUrl || !this.sessionId) {
         console.error(
-          "[LynkBox] Cannot open lab view: missing session URL or ID"
+          "[LynkBox] Cannot open lab view: missing session URL or ID",
         );
         return;
       }
@@ -2192,7 +2194,7 @@ define(["jquery", "core/str"], function ($, Str) {
       const self = this;
       console.log(
         "[LynkBox] injectSplitPane called with URL:",
-        this.activeSessionUrl
+        this.activeSessionUrl,
       );
 
       // Get current page URL for the Moodle iframe
@@ -2287,7 +2289,7 @@ define(["jquery", "core/str"], function ($, Str) {
       $("body")
         .children()
         .not(
-          "#lynkbox-split-container, .attackbox-launcher, .attackbox-overlay, .attackbox-quota-notification, .attackbox-idle-warning, .lynkbox-modal-overlay, .attackbox-btn-restore, script, style, link, noscript"
+          "#lynkbox-split-container, .attackbox-launcher, .attackbox-overlay, .attackbox-quota-notification, .attackbox-idle-warning, .lynkbox-modal-overlay, .attackbox-btn-restore, script, style, link, noscript",
         )
         .addClass("lynkbox-hidden-original");
 
@@ -2305,7 +2307,7 @@ define(["jquery", "core/str"], function ($, Str) {
 
       console.log(
         "[LynkBox] Split-pane injection complete. Container exists:",
-        $("#lynkbox-split-container").length > 0
+        $("#lynkbox-split-container").length > 0,
       );
     }
 
@@ -2347,7 +2349,7 @@ define(["jquery", "core/str"], function ($, Str) {
         (isInIframe && window.name === "lynkbox-moodle-frame")
       ) {
         console.log(
-          "[LynkBox] Running in embedded mode, skipping split-pane restore"
+          "[LynkBox] Running in embedded mode, skipping split-pane restore",
         );
         return;
       }
@@ -2367,7 +2369,7 @@ define(["jquery", "core/str"], function ($, Str) {
             const expiresAt = new Date(state.expiresAt);
             if (expiresAt <= new Date()) {
               console.log(
-                "[LynkBox] Saved session has expired, clearing state"
+                "[LynkBox] Saved session has expired, clearing state",
               );
               this.clearSplitPaneState();
               return;
@@ -2589,7 +2591,7 @@ define(["jquery", "core/str"], function ($, Str) {
         $btn
           .find("svg")
           .html(
-            '<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>'
+            '<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>',
           );
       } else {
         // Enter fullscreen
@@ -2600,7 +2602,7 @@ define(["jquery", "core/str"], function ($, Str) {
         $btn
           .find("svg")
           .html(
-            '<path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>'
+            '<path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>',
           );
       }
     }
@@ -2651,7 +2653,7 @@ define(["jquery", "core/str"], function ($, Str) {
       const confirmed = await this.showConfirm(
         this.strings.terminateConfirm,
         "End Session",
-        { confirmText: "End Session", cancelText: "Cancel", type: "warning" }
+        { confirmText: "End Session", cancelText: "Cancel", type: "warning" },
       );
 
       if (!confirmed) {
@@ -2684,13 +2686,13 @@ define(["jquery", "core/str"], function ($, Str) {
               reason: "user_requested",
               stop_instance: false, // Keep instance running, return to pool
             }),
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to end session: ${response.status}`
+            errorData.message || `Failed to end session: ${response.status}`,
           );
         }
 
@@ -2718,7 +2720,7 @@ define(["jquery", "core/str"], function ($, Str) {
         this.showAlert(
           this.strings.terminateSuccess,
           "Session Ended",
-          "success"
+          "success",
         );
       } catch (error) {
         console.error("Terminate session error:", error);
@@ -2733,7 +2735,7 @@ define(["jquery", "core/str"], function ($, Str) {
         this.showAlert(
           this.strings.terminateError + ": " + error.message,
           "Error",
-          "error"
+          "error",
         );
       }
     }
