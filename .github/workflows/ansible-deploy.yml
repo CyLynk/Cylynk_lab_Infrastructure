@@ -123,9 +123,11 @@ jobs:
             children:
               guacamole:
                 hosts:
-          $(echo -e "$GUAC_HOSTS")          vpn_servers:
+$(echo -e "$GUAC_HOSTS")
+              role_vpn_server:
                 hosts:
-          $(echo -e "$VPN_HOSTS")EOF
+$(echo -e "$VPN_HOSTS")
+EOF
 
           echo "Generated inventory:"
           cat inventory/hosts.yml
@@ -285,9 +287,11 @@ jobs:
             children:
               guacamole:
                 hosts:
-          $(echo -e "$GUAC_HOSTS")          vpn_servers:
+$(echo -e "$GUAC_HOSTS")
+              role_vpn_server:
                 hosts:
-          $(echo -e "$VPN_HOSTS")EOF
+$(echo -e "$VPN_HOSTS")
+EOF
 
           echo "Generated inventory:"
           cat inventory/hosts.yml
