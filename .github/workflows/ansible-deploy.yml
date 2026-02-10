@@ -103,6 +103,17 @@ jobs:
 
       - name: Create dynamic inventory
         run: |
+          GUAC_HOSTS=""
+          VPN_HOSTS=""
+          while read ip name; do
+            if [[ "$name" =~ guacamole ]]; then
+              GUAC_HOSTS="${GUAC_HOSTS}              ${ip}:\n"
+            fi
+            if [[ "$name" =~ vpn-server ]]; then
+              VPN_HOSTS="${VPN_HOSTS}              ${ip}:\n"
+            fi
+          done < /tmp/hosts.txt
+
           cat > inventory/hosts.yml <<EOF
           all:
             vars:
@@ -112,19 +123,9 @@ jobs:
             children:
               guacamole:
                 hosts:
-              vpn_servers:
+          $(echo -e "$GUAC_HOSTS")          vpn_servers:
                 hosts:
-          EOF
-
-          # Add hosts from AWS query
-          while read ip name; do
-            if [[ "$name" =~ guacamole ]]; then
-              sed -i "/guacamole:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
-            fi
-            if [[ "$name" =~ vpn-server ]]; then
-              sed -i "/vpn_servers:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
-            fi
-          done < /tmp/hosts.txt
+          $(echo -e "$VPN_HOSTS")EOF
 
           echo "Generated inventory:"
           cat inventory/hosts.yml
@@ -264,6 +265,17 @@ jobs:
 
       - name: Create dynamic inventory
         run: |
+          GUAC_HOSTS=""
+          VPN_HOSTS=""
+          while read ip name; do
+            if [[ "$name" =~ guacamole ]]; then
+              GUAC_HOSTS="${GUAC_HOSTS}              ${ip}:\n"
+            fi
+            if [[ "$name" =~ vpn-server ]]; then
+              VPN_HOSTS="${VPN_HOSTS}              ${ip}:\n"
+            fi
+          done < /tmp/hosts.txt
+
           cat > inventory/hosts.yml <<EOF
           all:
             vars:
@@ -273,19 +285,9 @@ jobs:
             children:
               guacamole:
                 hosts:
-              vpn_servers:
+          $(echo -e "$GUAC_HOSTS")          vpn_servers:
                 hosts:
-          EOF
-
-          # Add hosts from AWS query
-          while read ip name; do
-            if [[ "$name" =~ guacamole ]]; then
-              sed -i "/guacamole:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
-            fi
-            if [[ "$name" =~ vpn-server ]]; then
-              sed -i "/vpn_servers:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
-            fi
-          done < /tmp/hosts.txt
+          $(echo -e "$VPN_HOSTS")EOF
 
           echo "Generated inventory:"
           cat inventory/hosts.yml
