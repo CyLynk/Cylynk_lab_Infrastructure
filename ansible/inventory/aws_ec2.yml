@@ -55,11 +55,14 @@ keyed_groups:
 
 # Create friendly group names for backward compatibility
 groups:
-  # Guacamole servers group
-  guacamole: "'guacamole' in tags.Name.lower() or tags.Role == 'guacamole'"
+  # Guacamole servers group (flexible matching)
+  guacamole: "'guacamole' in (tags.Name | lower) or tags.Role in ['guacamole', 'Guacamole']"
+  
+  # Also create role_guacamole for consistency
+  role_guacamole: "'guacamole' in (tags.Name | lower) or tags.Role in ['guacamole', 'Guacamole']"
   
   # VPN servers group
-  vpn_servers: "'vpn' in tags.Name.lower() or tags.Role == 'vpn-server'"
+  vpn_servers: "'vpn' in (tags.Name | lower) or tags.Role in ['vpn-server', 'vpn_server']"
   
   # AttackBox instances
   attackbox: "tags.Role == 'AttackBox'"
