@@ -89,46 +89,19 @@ jobs:
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/id_rsa
 
-      - name: Get EC2 instances dynamically
-        id: get-hosts
+
+      - name: Configure AWS region for dynamic inventory
         run: |
-          # Use AWS CLI to get EC2 instances with tag Environment=dev
-          aws ec2 describe-instances \
-            --filters "Name=tag:Environment,Values=dev" "Name=instance-state-name,Values=running" \
-            --query 'Reservations[*].Instances[*].[PublicIpAddress,Tags[?Key==`Name`].Value|[0]]' \
-            --output text > /tmp/hosts.txt
+          # Set AWS region environment variable for aws_ec2 plugin
+          echo "AWS_REGION=${{ vars.AWS_REGION }}" >> $GITHUB_ENV
 
-          echo "Found hosts:"
-          cat /tmp/hosts.txt
-
-      - name: Create dynamic inventory
+      - name: Validate dynamic inventory
         run: |
-          GUAC_HOSTS=""
-          VPN_HOSTS=""
-          while read ip name; do
-            if [[ "$name" =~ guacamole ]]; then
-              GUAC_HOSTS="${GUAC_HOSTS}              ${ip}:\n"
-            fi
-            if [[ "$name" =~ vpn-server ]]; then
-              VPN_HOSTS="${VPN_HOSTS}              ${ip}:\n"
-            fi
-          done < /tmp/hosts.txt
-
-          cat > inventory/hosts.yml <<EOF
-          all:
-            vars:
-              ansible_user: ubuntu
-              ansible_ssh_private_key_file: ~/.ssh/id_rsa
-              ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-            children:
-              guacamole:
-                hosts:
-          $(echo -e "$GUAC_HOSTS")          vpn_servers:
-                hosts:
-          $(echo -e "$VPN_HOSTS")EOF
-
-          echo "Generated inventory:"
-          cat inventory/hosts.yml
+          echo "Testing AWS EC2 dynamic inventory..."
+          ansible-inventory -i inventory/aws_ec2.yml --list
+          echo ""
+          echo "Inventory groups:"
+          ansible-inventory -i inventory/aws_ec2.yml --graph
 
       - name: Run Ansible Playbook (Check Mode)
         if: github.event.inputs.check_mode == 'true'
@@ -138,8 +111,21 @@ jobs:
           GUACAMOLE_ADMIN_PASSWORD: ${{ secrets.GUACAMOLE_ADMIN_PASSWORD }}
         run: |
           PLAYBOOK="${{ github.event.inputs.playbook || 'guacamole' }}"
+          
+          # Determine target group based on playbook
+          if [ "$PLAYBOOK" = "guacamole" ]; then
+            TARGET_GROUP="guacamole"
+          elif [ "$PLAYBOOK" = "openvpn" ]; then
+            TARGET_GROUP="vpn_servers"
+          else
+            TARGET_GROUP="all"
+          fi
+          
+          echo "Running playbook: ${PLAYBOOK}.yml against group: ${TARGET_GROUP}"
+          
           ansible-playbook playbooks/${PLAYBOOK}.yml \
-            -i inventory/hosts.yml \
+            -i inventory/aws_ec2.yml \
+            --limit "${TARGET_GROUP}" \
             -e "guacamole_db_password=${GUACAMOLE_DB_PASSWORD}" \
             -e "guacamole_admin_username=${GUACAMOLE_ADMIN_USERNAME:-cylab_admin}" \
             -e "guacamole_admin_password=${GUACAMOLE_ADMIN_PASSWORD:-guacadmin}" \
@@ -159,8 +145,21 @@ jobs:
           GUACAMOLE_ADMIN_PASSWORD: ${{ secrets.GUACAMOLE_ADMIN_PASSWORD }}
         run: |
           PLAYBOOK="${{ github.event.inputs.playbook || 'guacamole' }}"
+          
+          # Determine target group based on playbook
+          if [ "$PLAYBOOK" = "guacamole" ]; then
+            TARGET_GROUP="guacamole"
+          elif [ "$PLAYBOOK" = "openvpn" ]; then
+            TARGET_GROUP="vpn_servers"
+          else
+            TARGET_GROUP="all"
+          fi
+          
+          echo "Running playbook: ${PLAYBOOK}.yml against group: ${TARGET_GROUP}"
+          
           ansible-playbook playbooks/${PLAYBOOK}.yml \
-            -i inventory/hosts.yml \
+            -i inventory/aws_ec2.yml \
+            --limit "${TARGET_GROUP}" \
             -e "guacamole_db_password=${GUACAMOLE_DB_PASSWORD}" \
             -e "guacamole_admin_username=${GUACAMOLE_ADMIN_USERNAME:-cylab_admin}" \
             -e "guacamole_admin_password=${GUACAMOLE_ADMIN_PASSWORD:-guacadmin}" \
@@ -251,46 +250,19 @@ jobs:
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/id_rsa
 
-      - name: Get EC2 instances dynamically
-        id: get-hosts
+
+      - name: Configure AWS region for dynamic inventory
         run: |
-          # Use AWS CLI to get EC2 instances with tag Environment=production
-          aws ec2 describe-instances \
-            --filters "Name=tag:Environment,Values=production" "Name=instance-state-name,Values=running" \
-            --query 'Reservations[*].Instances[*].[PublicIpAddress,Tags[?Key==`Name`].Value|[0]]' \
-            --output text > /tmp/hosts.txt
+          # Set AWS region environment variable for aws_ec2 plugin
+          echo "AWS_REGION=${{ vars.AWS_REGION_PROD }}" >> $GITHUB_ENV
 
-          echo "Found hosts:"
-          cat /tmp/hosts.txt
-
-      - name: Create dynamic inventory
+      - name: Validate dynamic inventory
         run: |
-          GUAC_HOSTS=""
-          VPN_HOSTS=""
-          while read ip name; do
-            if [[ "$name" =~ guacamole ]]; then
-              GUAC_HOSTS="${GUAC_HOSTS}              ${ip}:\n"
-            fi
-            if [[ "$name" =~ vpn-server ]]; then
-              VPN_HOSTS="${VPN_HOSTS}              ${ip}:\n"
-            fi
-          done < /tmp/hosts.txt
-
-          cat > inventory/hosts.yml <<EOF
-          all:
-            vars:
-              ansible_user: ubuntu
-              ansible_ssh_private_key_file: ~/.ssh/id_rsa
-              ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-            children:
-              guacamole:
-                hosts:
-          $(echo -e "$GUAC_HOSTS")          vpn_servers:
-                hosts:
-          $(echo -e "$VPN_HOSTS")EOF
-
-          echo "Generated inventory:"
-          cat inventory/hosts.yml
+          echo "Testing AWS EC2 dynamic inventory..."
+          ansible-inventory -i inventory/aws_ec2.yml --list
+          echo ""
+          echo "Inventory groups:"
+          ansible-inventory -i inventory/aws_ec2.yml --graph
 
       - name: Run Ansible Playbook (Check Mode)
         if: github.event.inputs.check_mode == 'true'
@@ -305,8 +277,21 @@ jobs:
           if [ -n "${DOMAIN_NAME}" ]; then
             ENABLE_SSL="true"
           fi
+          
+          # Determine target group based on playbook
+          if [ "$PLAYBOOK" = "guacamole" ]; then
+            TARGET_GROUP="guacamole"
+          elif [ "$PLAYBOOK" = "openvpn" ]; then
+            TARGET_GROUP="vpn_servers"
+          else
+            TARGET_GROUP="all"
+          fi
+          
+          echo "Running playbook: ${PLAYBOOK}.yml against group: ${TARGET_GROUP}"
+          
           ansible-playbook playbooks/${PLAYBOOK}.yml \
-            -i inventory/hosts.yml \
+            -i inventory/aws_ec2.yml \
+            --limit "${TARGET_GROUP}" \
             -e "guacamole_db_password=${GUACAMOLE_DB_PASSWORD}" \
             -e "guacamole_admin_username=${GUACAMOLE_ADMIN_USERNAME:-cylab_admin}" \
             -e "guacamole_admin_password=${GUACAMOLE_ADMIN_PASSWORD:-guacadmin}" \
@@ -331,8 +316,21 @@ jobs:
           if [ -n "${DOMAIN_NAME}" ]; then
             ENABLE_SSL="true"
           fi
+          
+          # Determine target group based on playbook
+          if [ "$PLAYBOOK" = "guacamole" ]; then
+            TARGET_GROUP="guacamole"
+          elif [ "$PLAYBOOK" = "openvpn" ]; then
+            TARGET_GROUP="vpn_servers"
+          else
+            TARGET_GROUP="all"
+          fi
+          
+          echo "Running playbook: ${PLAYBOOK}.yml against group: ${TARGET_GROUP}"
+          
           ansible-playbook playbooks/${PLAYBOOK}.yml \
-            -i inventory/hosts.yml \
+            -i inventory/aws_ec2.yml \
+            --limit "${TARGET_GROUP}" \
             -e "guacamole_db_password=${GUACAMOLE_DB_PASSWORD}" \
             -e "guacamole_admin_username=${GUACAMOLE_ADMIN_USERNAME:-cylab_admin}" \
             -e "guacamole_admin_password=${GUACAMOLE_ADMIN_PASSWORD:-guacadmin}" \
