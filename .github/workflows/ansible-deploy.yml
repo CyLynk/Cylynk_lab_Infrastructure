@@ -21,6 +21,7 @@ on:
         type: choice
         options:
           - guacamole
+          - openvpn
           - all
       check_mode:
         description: "Run in check mode (dry run)"
@@ -111,12 +112,17 @@ jobs:
             children:
               guacamole:
                 hosts:
+              vpn_servers:
+                hosts:
           EOF
 
           # Add hosts from AWS query
           while read ip name; do
             if [[ "$name" =~ guacamole ]]; then
-              echo "          $ip:" >> inventory/hosts.yml
+              sed -i "/guacamole:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
+            fi
+            if [[ "$name" =~ vpn-server ]]; then
+              sed -i "/vpn_servers:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
             fi
           done < /tmp/hosts.txt
 
@@ -267,12 +273,17 @@ jobs:
             children:
               guacamole:
                 hosts:
+              vpn_servers:
+                hosts:
           EOF
 
           # Add hosts from AWS query
           while read ip name; do
             if [[ "$name" =~ guacamole ]]; then
-              echo "          $ip:" >> inventory/hosts.yml
+              sed -i "/guacamole:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
+            fi
+            if [[ "$name" =~ vpn-server ]]; then
+              sed -i "/vpn_servers:/,/hosts:/{/hosts:/a\          $ip:}" inventory/hosts.yml
             fi
           done < /tmp/hosts.txt
 
