@@ -13,6 +13,7 @@ filters:
   tag:Role:
     - AttackBox
     - vpn-server
+    - Guacamole
   tag:ManagedBy: Terraform
   instance-state-name: running
 
@@ -24,6 +25,10 @@ hostnames:
 # Prefer private IP for connections (use public-ip-address if connecting over internet)
 compose:
   ansible_host: public_ip_address
+
+# Create specific groups based on tags
+groups:
+  guacamole: "'Guacamole' in tags.Role"
 
 # Group instances by various attributes
 keyed_groups:
