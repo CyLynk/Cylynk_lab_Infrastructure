@@ -437,6 +437,18 @@ resource "aws_iam_role_policy" "orchestrator_policy" {
         Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/${var.environment}/*"
       },
       {
+        Sid    = "SSMVPNCommand"
+        Effect = "Allow"
+        Action = [
+          "ssm:SendCommand",
+          "ssm:GetCommandInvocation"
+        ]
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:*:document/AWS-RunShellScript",
+          "arn:aws:ec2:${var.aws_region}:*:instance/${var.vpn_instance_id}"
+        ]
+      },
+      {
         Sid    = "APIGatewayManagementAPI"
         Effect = "Allow"
         Action = [
@@ -1587,6 +1599,83 @@ resource "aws_lambda_permission" "list_lab_templates_apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.list_lab_templates.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
+}
+
+# =============================================================================
+# VPN Configuration Lambda
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "get_vpn_config" {
+  name              = "/aws/lambda/${local.function_name_prefix}-get-vpn-config"
+  retention_in_days = var.log_retention_days
+  tags              = local.common_tags
+}
+
+resource "aws_lambda_function" "get_vpn_config" {
+  filename         = "${path.module}/lambda/packages/get-vpn-config.zip"
+  function_name    = "${local.function_name_prefix}-get-vpn-config"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
+
+  source_code_hash = fileexists("${path.module}/lambda/packages/get-vpn-config.zip") ? filebase64sha256("${path.module}/lambda/packages/get-vpn-config.zip") : null
+
+  layers = [aws_lambda_layer_version.common.arn]
+
+  environment {
+    variables = {
+      SESSIONS_TABLE  = aws_dynamodb_table.sessions.name
+      VPN_INSTANCE_ID = var.vpn_instance_id
+      ENVIRONMENT     = var.environment
+      PROJECT_NAME    = var.project_name
+      AWS_REGION_NAME = var.aws_region
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_config ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [var.lambda_security_group_id]
+    }
+  }
+
+  tracing_config {
+    mode = var.enable_xray_tracing ? "Active" : "PassThrough"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.get_vpn_config]
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.function_name_prefix}-get-vpn-config"
+    }
+  )
+}
+
+resource "aws_apigatewayv2_integration" "get_vpn_config" {
+  api_id                 = aws_apigatewayv2_api.orchestrator.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.get_vpn_config.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "get_vpn_config" {
+  api_id    = aws_apigatewayv2_api.orchestrator.id
+  route_key = "GET /vpn-config"
+  target    = "integrations/${aws_apigatewayv2_integration.get_vpn_config.id}"
+}
+
+resource "aws_lambda_permission" "get_vpn_config_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_vpn_config.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.orchestrator.execution_arn}/*/*"
 }

@@ -10,7 +10,9 @@ regions:
 
 # Filter instances by tags
 filters:
-  tag:Role: AttackBox
+  tag:Role:
+    - AttackBox
+    - vpn-server
   tag:ManagedBy: Terraform
   instance-state-name: running
 

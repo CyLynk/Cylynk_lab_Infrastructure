@@ -99,6 +99,12 @@ variable "rdp_password" {
   sensitive   = true
 }
 
+variable "vpn_instance_id" {
+  description = "Instance ID of the OpenVPN server"
+  type        = string
+  default     = ""
+}
+
 # Session Configuration
 variable "session_ttl_hours" {
   description = "Session TTL in hours before auto-cleanup"

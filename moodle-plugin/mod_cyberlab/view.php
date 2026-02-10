@@ -198,6 +198,16 @@ echo html_writer::tag('button', html_writer::tag('i', '', ['class' => 'fa fa-sto
     'style' => 'display: none;',
 ]);
 
+// Download VPN Config button (if OpenVPN connection enabled).
+if (in_array('openvpn', $connectionmethods)) {
+    echo html_writer::tag('button', html_writer::tag('i', '', ['class' => 'fa fa-download mr-2']) .
+        get_string('downloadvpnconfig', 'mod_cyberlab'), [
+        'class' => 'btn btn-lg btn-info mr-2',
+        'id' => 'cyberlab-vpn-btn',
+        'style' => 'display: none;',
+    ]);
+}
+
 // Launch LynkBox button (if LynkBox connection enabled).
 if (in_array('lynkbox', $connectionmethods)) {
     echo html_writer::tag('button', html_writer::tag('i', '', ['class' => 'fa fa-terminal mr-2']) .

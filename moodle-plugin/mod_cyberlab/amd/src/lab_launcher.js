@@ -46,6 +46,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     startBtn: null,
     terminateBtn: null,
     lynkboxBtn: null,
+    vpnBtn: null,
     statusDiv: null,
     targetInfo: null,
     targetIp: null,
@@ -74,6 +75,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     elements.startBtn = $("#cyberlab-start-btn");
     elements.terminateBtn = $("#cyberlab-terminate-btn");
     elements.lynkboxBtn = $("#cyberlab-lynkbox-btn");
+    elements.vpnBtn = $("#cyberlab-vpn-btn");
     elements.statusDiv = $("#cyberlab-session-status");
     elements.targetInfo = $("#cyberlab-target-info");
     elements.targetIp = $("#cyberlab-target-ip");
@@ -96,6 +98,9 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     elements.startBtn.on("click", startLab);
     elements.terminateBtn.on("click", confirmTerminate);
     elements.lynkboxBtn.on("click", openLynkBox);
+    if (elements.vpnBtn.length) {
+      elements.vpnBtn.on("click", downloadVpnConfig);
+    }
     elements.copyIpBtn.on("click", copyIpAddress);
     console.log("[CyberLab] Event handlers bound");
 
@@ -525,6 +530,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     elements.startBtn.show().prop("disabled", false);
     elements.terminateBtn.hide();
     elements.lynkboxBtn.hide();
+    if (elements.vpnBtn.length) elements.vpnBtn.hide();
     elements.targetInfo.hide();
     elements.progressDiv.hide();
     Str.get_string("nosessionstarted", "mod_cyberlab").done(function (message) {
@@ -540,6 +546,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     elements.startBtn.hide();
     elements.terminateBtn.show().prop("disabled", false);
     elements.lynkboxBtn.hide();
+    if (elements.vpnBtn.length) elements.vpnBtn.hide();
     elements.targetInfo.hide();
     elements.progressDiv.show();
     updateProgress(10);
@@ -559,6 +566,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
     elements.startBtn.hide();
     elements.terminateBtn.show().prop("disabled", false);
     elements.lynkboxBtn.show();
+    if (elements.vpnBtn.length) elements.vpnBtn.show();
     elements.targetInfo.show();
     elements.targetIp.text(targetIp || "-");
     elements.progressDiv.hide();
@@ -581,6 +589,16 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
       message: message,
       type: "error",
     });
+  };
+
+  /**
+   * Download VPN configuration.
+   */
+  const downloadVpnConfig = function () {
+    if (!config.sessionId) return;
+    
+    const url = M.cfg.wwwroot + '/mod/cyberlab/ajax/get_vpn_config.php?cmid=' + config.cmid + '&session_id=' + config.sessionId;
+    window.location.href = url;
   };
 
   return {

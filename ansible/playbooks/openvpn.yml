@@ -1,0 +1,88 @@
+---
+- name: Configure OpenVPN Server
+  hosts: role_vpn_server
+  user: ubuntu
+  become: yes
+  vars:
+    openvpn_data_dir: /opt/openvpn
+    openvpn_image: kylemanna/openvpn
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-docker
+        state: present
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Create OpenVPN data directory
+      file:
+        path: "{{ openvpn_data_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Check if OpenVPN configuration exists
+      stat:
+        path: "{{ openvpn_data_dir }}/openvpn.conf"
+      register: openvpn_conf
+
+    - name: Generate OpenVPN configuration
+      command: >
+        docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn
+        {{ openvpn_image }}
+        ovpn_genconfig -u udp://{{ ansible_host }}
+      when: not openvpn_conf.stat.exists
+
+    - name: Initialize PKI (non-interactive)
+      command: >
+        docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn
+        -e EASYRSA_BATCH=1
+        {{ openvpn_image }}
+        ovpn_initpki nopass
+      when: not openvpn_conf.stat.exists
+
+    - name: Start OpenVPN container
+      docker_container:
+        name: openvpn
+        image: "{{ openvpn_image }}"
+        state: started
+        restart_policy: always
+        capabilities:
+          - NET_ADMIN
+        ports:
+          - "1194:1194/udp"
+        volumes:
+          - "{{ openvpn_data_dir }}:/etc/openvpn"
+
+    - name: Create client generation script
+      copy:
+        dest: /usr/local/bin/create-vpn-client.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          NAME=$1
+          if [ -z "$NAME" ]; then
+            echo "Usage: $0 <client_name>"
+            exit 1
+          fi
+          
+          docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn {{ openvpn_image }} easyrsa build-client-full "$NAME" nopass > /dev/null 2>&1
+          docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn {{ openvpn_image }} ovpn_getclient "$NAME"

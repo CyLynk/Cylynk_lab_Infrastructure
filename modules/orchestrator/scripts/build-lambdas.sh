@@ -33,7 +33,7 @@ rm -rf "$LAYER_BUILD_DIR"
 echo "Created: $LAYERS_DIR/common.zip"
 
 # Build individual Lambda packages
-FUNCTIONS=("create-session" "get-session-status" "terminate-session" "pool-manager" "get-usage" "usage-history" "admin-sessions" "session-heartbeat")
+FUNCTIONS=("create-session" "get-session-status" "terminate-session" "pool-manager" "get-usage" "usage-history" "admin-sessions" "session-heartbeat" "create-lab-session" "get-lab-status" "terminate-lab-session" "list-lab-templates" "get-vpn-config" "websocket-connect" "websocket-default" "websocket-disconnect" "websocket-push")
 
 for func in "${FUNCTIONS[@]}"; do
     echo "Building $func..."

@@ -288,6 +288,9 @@ module "orchestrator" {
   enable_xray_tracing  = false
   alarm_sns_topic_arns = compact([module.monitoring.sns_topic_arn])
 
+  # VPN Integration
+  vpn_instance_id = module.vpn.vpn_instance_id
+
   tags = local.common_tags
 }
 
@@ -322,5 +325,20 @@ module "cost_optimization" {
   enable_cost_dashboard = true
   enable_cost_alarms    = true
   log_retention_days    = 7  # Match other CloudWatch log retention
+  tags = local.common_tags
+}
+
+# VPN Module - OpenVPN Server
+module "vpn" {
+  source = "../../modules/vpn"
+
+  project_name      = var.project_name
+  environment       = local.environment
+  vpc_id            = module.networking.vpc_id
+  subnet_id         = module.networking.management_subnet_id
+  security_group_id = module.security.vpn_security_group_id
+  key_name          = module.security.key_pair_name
+  instance_type     = var.vpn_instance_type
+
   tags = local.common_tags
 }

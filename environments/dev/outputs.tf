@@ -109,3 +109,17 @@ output "sns_topic_arn" {
   value       = module.monitoring.sns_topic_arn
 }
 
+# =============================================================================
+# VPN Outputs
+# =============================================================================
+
+output "vpn_public_ip" {
+  description = "Public IP of the OpenVPN server"
+  value       = module.vpn.vpn_public_ip
+}
+
+output "vpn_instance_id" {
+  description = "Instance ID of the OpenVPN server"
+  value       = module.vpn.vpn_instance_id
+}
+
