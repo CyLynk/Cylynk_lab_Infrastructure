@@ -95,6 +95,8 @@ def main():
         "get-lab-status",
         "terminate-lab-session",
         "list-lab-templates",
+        # VPN management
+        "get-vpn-config",
     ]
     
     # Build each function
