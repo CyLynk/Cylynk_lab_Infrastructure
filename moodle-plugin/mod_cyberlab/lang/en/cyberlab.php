@@ -57,6 +57,7 @@ $string['connection_tailscale'] = 'Tailscale VPN';
 $string['connection_tailscale_desc'] = 'Connect using Tailscale mesh VPN from your own machine';
 $string['connection_openvpn'] = 'OpenVPN';
 $string['connection_openvpn_desc'] = 'Download OpenVPN configuration to connect from your own machine';
+$string['downloadvpnconfig'] = 'Download VPN Configuration';
 
 // Lab instructions.
 $string['labinstructions'] = 'Lab Instructions';

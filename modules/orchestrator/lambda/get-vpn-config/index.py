@@ -19,9 +19,45 @@ def handler(event, context):
     GET /vpn-config?session_id=...&student_id=...
     """
     try:
-        query_params = event.get('queryStringParameters', {})
+        logger.info(f"Event received: {json.dumps(event)}")
+
+        # Robust parameter extraction for API Gateway v2
+        session_id = None
+        student_id = None
+
+        # Try queryStringParameters first
+        query_params = event.get('queryStringParameters') or {}
         session_id = query_params.get('session_id')
         student_id = query_params.get('student_id')
+
+        # Workaround: Moodle's PHP may encode & as &amp; in query strings,
+        # causing API Gateway to parse "amp;student_id" as the key name.
+        if not student_id:
+            student_id = query_params.get('amp;student_id')
+
+        # Fallback: parse rawQueryString (fix &amp; encoding first)
+        if not session_id or not student_id:
+            raw_qs = event.get('rawQueryString', '')
+            if raw_qs:
+                # Fix HTML-encoded ampersands from Moodle
+                raw_qs = raw_qs.replace('&amp;', '&')
+                from urllib.parse import parse_qs
+                parsed = parse_qs(raw_qs)
+                session_id = session_id or (parsed.get('session_id', [None])[0])
+                student_id = student_id or (parsed.get('student_id', [None])[0])
+
+        # Fallback: check request body (in case sent as POST)
+        if not session_id or not student_id:
+            body = event.get('body', '')
+            if body:
+                try:
+                    body_data = json.loads(body)
+                    session_id = session_id or body_data.get('session_id')
+                    student_id = student_id or body_data.get('student_id')
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        logger.info(f"Parsed params - session_id: {session_id}, student_id: {student_id}")
 
         if not session_id or not student_id:
             return {
@@ -40,13 +76,15 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Session not found'})
             }
 
-        if session.get('student_id') != student_id:
+        # Check ownership - lab sessions use 'user_id' field
+        session_owner = session.get('user_id') or session.get('student_id')
+        if session_owner != student_id:
             return {
                 'statusCode': 403,
                 'body': json.dumps({'error': 'Unauthorized'})
             }
 
-        if session.get('status') != 'running':
+        if session.get('status') not in ('running', 'launching', 'active', 'ready'):
             return {
                 'statusCode': 400,
                 'body': json.dumps({'error': 'Session is not running'})

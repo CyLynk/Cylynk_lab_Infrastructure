@@ -474,6 +474,15 @@ resource "aws_iam_role_policy" "orchestrator_policy" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = "arn:aws:secretsmanager:${var.aws_region}:*:secret:${var.project_name}/${var.environment}/*"
+      },
+      {
+        Sid    = "SSMAccess"
+        Effect = "Allow"
+        Action = [
+          "ssm:SendCommand",
+          "ssm:GetCommandInvocation"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -1628,7 +1637,7 @@ resource "aws_lambda_function" "get_vpn_config" {
 
   environment {
     variables = {
-      SESSIONS_TABLE  = aws_dynamodb_table.sessions.name
+      SESSIONS_TABLE  = aws_dynamodb_table.lab_sessions.name
       VPN_INSTANCE_ID = var.vpn_instance_id
       ENVIRONMENT     = var.environment
       PROJECT_NAME    = var.project_name

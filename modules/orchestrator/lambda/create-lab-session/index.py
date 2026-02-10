@@ -267,6 +267,28 @@ def handler(event, context):
         if not template_id:
             return error_response(400, "Missing template_id", "template_id is required")
         
+        check_only = body.get("check_only", False)
+        
+        # Check for existing session first
+        if check_only:
+            existing = check_existing_lab_session(user_id, template_id)
+            if existing:
+                return success_response({
+                    "session_id": existing["session_id"],
+                    "status": existing["status"],
+                    "instance_id": existing.get("instance_id"),
+                    "target_ip": existing.get("target_ip"),
+                    "template_id": template_id,
+                    "template_name": existing.get("template_name"),
+                    "existing": True,
+                    "message": "Existing active session found"
+                }, "Existing active session found")
+            else:
+                return success_response({
+                    "existing": False, 
+                    "message": "No active session found"
+                }, "No active session found")
+
         # Create the lab session
         result = create_lab_session(
             user_id=user_id,

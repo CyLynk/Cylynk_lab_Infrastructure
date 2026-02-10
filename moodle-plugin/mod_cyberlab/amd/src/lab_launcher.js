@@ -132,7 +132,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
             response.session_id,
           );
           config.sessionId = response.session_id;
-          if (response.status === "running") {
+          if (response.status === "running" || response.status === "active" || response.status === "ready") {
             console.log(
               "[CyberLab] Session is running, target_ip:",
               response.target_ip,
@@ -415,7 +415,7 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
         });
         updateStatusDisplay(response);
 
-        if (response.status === "running") {
+        if (response.status === "running" || response.status === "active" || response.status === "ready") {
           console.log(
             "[CyberLab] ✅ Lab is now RUNNING! Target IP:",
             response.target_ip,
@@ -476,6 +476,8 @@ define(["jquery", "core/ajax", "core/notification", "core/str"], function (
       launching: "Launching lab VM...",
       initializing: "Starting services (waiting for status checks)...",
       running: "Lab is running",
+      active: "Lab is active",
+      ready: "Lab is ready",
       terminated: "Session ended",
       error: "Error",
     };

@@ -13,7 +13,7 @@ require_once(__DIR__ . '/../../../config.php');
 require_once($CFG->dirroot . '/mod/cyberlab/lib.php');
 
 $cmid = required_param('cmid', PARAM_INT);
-$session_id = required_param('session_id', PARAM_ALPHANUM);
+$session_id = required_param('session_id', PARAM_ALPHANUMEXT);
 
 // Get course module and context.
 $cm = get_coursemodule_from_id('cyberlab', $cmid, 0, false, MUST_EXIST);
@@ -25,54 +25,67 @@ $context = context_module::instance($cm->id);
 require_login($course, false, $cm);
 require_capability('mod/cyberlab:attempt', $context);
 
-// Verify session ownership.
-$session = $DB->get_record('cyberlab_sessions', [
-    'session_id' => $session_id,
-    'cyberlabid' => $cyberlab->id,
-    'userid' => $USER->id
-], '*', MUST_EXIST);
-
-// Verify session is active.
-if ($session->status !== 'running') {
-    throw new moodle_exception('error', 'mod_cyberlab', '', 'Session is not running.');
-}
-
 // Verify OpenVPN is enabled.
 $methods = json_decode($cyberlab->connection_methods, true);
 if (!in_array('openvpn', $methods)) {
     throw new moodle_exception('error', 'mod_cyberlab', '', 'OpenVPN is not enabled for this lab.');
 }
 
-// Call Orchestrator API to get the real config.
+// Get API configuration (with local_attackbox fallback, matching other endpoints).
 $api_url = get_config('mod_cyberlab', 'api_url');
-$secret = get_config('mod_cyberlab', 'webhook_secret');
+$webhook_secret = get_config('mod_cyberlab', 'webhook_secret');
 
-if (empty($api_url) || empty($secret)) {
+if (empty($api_url)) {
+    $api_url = get_config('local_attackbox', 'api_url');
+}
+if (empty($webhook_secret)) {
+    $webhook_secret = get_config('local_attackbox', 'webhook_secret');
+}
+
+if (empty($api_url) || empty($webhook_secret)) {
     throw new moodle_exception('error', 'mod_cyberlab', '', 'API not configured.');
 }
+
+// Build authenticated request (matching other endpoints' auth pattern).
+$timestamp = time();
+$token = hash_hmac('sha256', $USER->id . $timestamp, $webhook_secret);
 
 $url = rtrim($api_url, '/') . '/vpn-config';
 $params = [
     'session_id' => $session_id,
-    'student_id' => $USER->id
+    'student_id' => (string) $USER->id
 ];
-$url .= '?' . http_build_query($params);
+$url .= '?' . http_build_query($params, '', '&');
 
 $curl = curl_init();
-curl_setopt($curl, CURLOPT_URL, $url);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($curl, CURLOPT_HEADER, false);
-curl_setopt($curl, CURLOPT_HTTPHEADER, [
-    'X-Date: ' . gmdate('Ymd\THis\Z'),
-    'Authorization: ' . $secret // In a real scenario, should use proper signing
+curl_setopt_array($curl, [
+    CURLOPT_URL => $url,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HEADER => false,
+    CURLOPT_HTTPHEADER => [
+        'Content-Type: application/json',
+        'X-Moodle-Token: ' . $token,
+        'X-Moodle-Timestamp: ' . $timestamp,
+    ],
+    CURLOPT_TIMEOUT => 30,
 ]);
 
 $vpn_config = curl_exec($curl);
+$curl_error = curl_error($curl);
 $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 curl_close($curl);
 
+if ($curl_error) {
+    throw new moodle_exception('error', 'mod_cyberlab', '', 'VPN config request failed: ' . $curl_error);
+}
+
 if ($http_code !== 200 || empty($vpn_config)) {
-    throw new moodle_exception('error', 'mod_cyberlab', '', 'Failed to retrieve VPN configuration from backend.');
+    $error_detail = "HTTP $http_code";
+    $decoded = json_decode($vpn_config, true);
+    if ($decoded && isset($decoded['error'])) {
+        $error_detail .= ': ' . $decoded['error'];
+    }
+    throw new moodle_exception('error', 'mod_cyberlab', '', 'Failed to retrieve VPN configuration: ' . $error_detail);
 }
 
 // Send file download headers.
