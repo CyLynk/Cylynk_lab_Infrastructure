@@ -85,7 +85,7 @@ variable "allowed_ssh_cidr" {
 }
 
 variable "vpn_port" {
-  description = "WireGuard VPN port"
+  description = "VPN port"
   type        = number
 }
 

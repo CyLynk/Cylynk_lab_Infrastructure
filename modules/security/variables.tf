@@ -22,9 +22,9 @@ variable "allowed_ssh_cidr" {
 }
 
 variable "vpn_port" {
-  description = "WireGuard VPN port"
+  description = "VPN port (OpenVPN default)"
   type        = number
-  default     = 51820
+  default     = 1194
 }
 
 variable "vpn_subnet_cidr" {

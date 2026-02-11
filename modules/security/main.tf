@@ -68,7 +68,7 @@ resource "aws_security_group" "vpn" {
 
 resource "aws_vpc_security_group_ingress_rule" "vpn_wireguard" {
   security_group_id = aws_security_group.vpn.id
-  description       = "WireGuard VPN"
+  description       = "OpenVPN"
   from_port         = var.vpn_port
   to_port           = var.vpn_port
   ip_protocol       = "udp"
