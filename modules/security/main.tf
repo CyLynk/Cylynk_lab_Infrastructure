@@ -178,9 +178,16 @@ resource "aws_vpc_security_group_ingress_rule" "lab_vms_attackbox" {
 
 resource "aws_vpc_security_group_ingress_rule" "lab_vms_vpn" {
   security_group_id = aws_security_group.lab_vms.id
-  description       = "All traffic from VPN users"
+  description       = "All traffic from VPN users (Routed)"
   ip_protocol       = "-1"
   cidr_ipv4         = var.vpn_subnet_cidr
+}
+
+resource "aws_vpc_security_group_ingress_rule" "lab_vms_vpn_nat" {
+  security_group_id            = aws_security_group.lab_vms.id
+  description                  = "All traffic from VPN Server (NAT)"
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.vpn.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "lab_vms_self" {
@@ -369,6 +376,14 @@ resource "aws_vpc_security_group_ingress_rule" "lab_ssh_admin" {
   to_port           = 22
   ip_protocol       = "tcp"
   cidr_ipv4         = var.allowed_ssh_cidr
+}
+
+# Allow all traffic from VPN users (NAT)
+resource "aws_vpc_security_group_ingress_rule" "lab_targets_vpn_nat" {
+  security_group_id            = aws_security_group.lab_targets.id
+  description                  = "All traffic from VPN Server (NAT)"
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.vpn.id
 }
 
 # Outbound: Allow internet access for package updates (can be restricted)

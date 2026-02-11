@@ -6,6 +6,8 @@
   vars:
     openvpn_data_dir: /opt/openvpn
     openvpn_image: kylemanna/openvpn
+    vpc_cidr_route: "10.1.0.0"
+    vpc_cidr_mask: "255.255.0.0"
 
   tasks:
     - name: Update apt cache
@@ -48,8 +50,15 @@
       command: >
         docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn
         {{ openvpn_image }}
-        ovpn_genconfig -u udp://{{ ansible_host }}
+        ovpn_genconfig -u udp://{{ ansible_host }} -p "route {{ vpc_cidr_route }} {{ vpc_cidr_mask }}"
       when: not openvpn_conf.stat.exists
+
+    - name: Ensure route is pushed in config (if already generated)
+      lineinfile:
+        path: "{{ openvpn_data_dir }}/openvpn.conf"
+        line: 'push "route {{ vpc_cidr_route }} {{ vpc_cidr_mask }}"'
+        state: present
+      notify: restart openvpn
 
     - name: Initialize PKI (non-interactive)
       command: >
@@ -58,6 +67,7 @@
         {{ openvpn_image }}
         ovpn_initpki nopass
       when: not openvpn_conf.stat.exists
+
 
     - name: Start OpenVPN container
       docker_container:
@@ -86,3 +96,10 @@
           
           docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn {{ openvpn_image }} easyrsa build-client-full "$NAME" nopass > /dev/null 2>&1
           docker run --rm -v {{ openvpn_data_dir }}:/etc/openvpn {{ openvpn_image }} ovpn_getclient "$NAME"
+
+  handlers:
+    - name: restart openvpn
+      docker_container:
+        name: openvpn
+        state: started
+        restart: yes
